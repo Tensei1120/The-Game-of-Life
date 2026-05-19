@@ -4,7 +4,6 @@
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
-  // ── ボード定数 ──
   const CW     = 1120;
   const CH     = 930;
   const SQ_W   = 64;
@@ -26,11 +25,9 @@
     [ 76,  80],
   ];
 
-  // ── セッションID ──
   let myId = sessionStorage.getItem('gol_pid');
   if (!myId) { myId = crypto.randomUUID(); sessionStorage.setItem('gol_pid', myId); }
 
-  // ── 状態 ──
   let myName             = '';
   let roomId             = '';
   let players            = [];
@@ -74,7 +71,6 @@
     return sqs;
   }
 
-  // ── DOM ──
   const $ = id => document.getElementById(id);
 
   function fadeOut(el, cb) {
@@ -96,7 +92,6 @@
 
   $('btn-go').addEventListener('click', () => showScreen('word-screen'));
 
-  // ── あいことば入力 ──
   const nameInput = $('name-input');
   const wordInput = $('word-input');
   const wordError = $('word-error');
@@ -126,19 +121,19 @@
         .from('rooms').select('id,host_id,status').eq('id', roomId).maybeSingle();
       if (fe) throw fe;
 
-      if (existing?.status === 'closed') {
-        wordError.textContent = 'このルームは解散されています。別のあいことばを試してください。';
-        btn.disabled = false; btn.textContent = 'ルームに入る';
-        return;
+      let roomData = existing;
+      if (roomData?.status === 'closed') {
+        await sb.from('rooms').delete().eq('id', roomId);
+        roomData = null;
       }
 
-      if (!existing) {
+      if (!roomData) {
         const { error } = await sb.from('rooms')
           .insert({ id: roomId, host_id: myId, alive_cells: {} });
         if (error) throw error;
         isHost = true;
       } else {
-        isHost = existing.host_id === myId;
+        isHost = roomData.host_id === myId;
       }
 
       const { data: ep } = await sb.from('room_players').select('color').eq('room_id', roomId);
@@ -151,9 +146,7 @@
       );
       if (pe) throw pe;
 
-      if (isHost) {
-        window.addEventListener('beforeunload', dissolveRoom);
-      }
+      if (isHost) window.addEventListener('beforeunload', dissolveRoom);
 
       await refreshPlayers();
       subscribeRoom();
@@ -172,25 +165,23 @@
     }
   }
 
+  // keepalive DELETE: ページを閉じてもリクエストが完了する
   function dissolveRoom() {
     if (!isHost || !roomId) return;
     fetch(
       `${SUPABASE_URL}/rest/v1/rooms?id=eq.${encodeURIComponent(roomId)}`,
       {
-        method:  'PATCH',
+        method:  'DELETE',
         headers: {
-          'Content-Type':  'application/json',
           'apikey':        SUPABASE_ANON,
           'Authorization': `Bearer ${SUPABASE_ANON}`,
           'Prefer':        'return=minimal',
         },
-        body:      JSON.stringify({ status: 'closed' }),
         keepalive: true,
       }
     );
   }
 
-  // ── 待機室 ──
   async function refreshPlayers() {
     const { data } = await sb.from('room_players').select('*')
       .eq('room_id', roomId).order('joined_at');
@@ -213,12 +204,14 @@
     await sb.from('rooms').update({ status: 'playing', alive_cells: initPos }).eq('id', roomId);
   });
 
-  // ── Realtime ──
   function subscribeRoom() {
     channel = sb.channel('room-' + roomId)
       .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}`
+        event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}`
       }, p => onRoomChange(p.new))
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}`
+      }, () => { if (!isHost) showDissolutionOverlay(); })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'room_players', filter: `room_id=eq.${roomId}`
       }, () => refreshPlayers())
@@ -227,12 +220,6 @@
 
   async function onRoomChange(room) {
     if (!room) return;
-
-    if (room.status === 'closed') {
-      if (!isHost) showDissolutionOverlay();
-      return;
-    }
-
     if (room.status === 'playing') {
       const { data } = await sb.from('room_players').select('*')
         .eq('room_id', roomId).order('joined_at');
@@ -258,7 +245,6 @@
     }, 3000);
   }
 
-  // ── Canvas ──
   const canvas = $('board-canvas');
   const ctx    = canvas.getContext('2d');
   canvas.width  = CW;
