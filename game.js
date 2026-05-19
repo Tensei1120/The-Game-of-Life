@@ -8,6 +8,7 @@
   const MAX_PLAYERS = 9;
   const MAX_HAPPINESS = 20;
   const MAX_HEALTH = 20;
+  const FORCED_STOPS = [20, 40, 60, 80];
   const PLAYER_COLORS = [
     '#1565c0','#c62828','#2e7d32','#e65100',
     '#6a1b9a','#00838f','#f9a825','#ad1457','#37474f'
@@ -41,6 +42,13 @@
   }
   function getPos(d)   { return typeof d==='object'&&d!==null ? d.pos   : (d||1); }
   function getStats(d) { return typeof d==='object'&&d!==null ? d : defaultStats(d||1); }
+
+  // 強制ストップ考慮した着地マス計算
+  function calcLanding(currentPos, roll) {
+    const dest = Math.min(currentPos + roll, 100);
+    const stop = FORCED_STOPS.find(s => s > currentPos && s <= dest);
+    return stop || dest;
+  }
 
   const squares = buildSquares();
   function buildSquares() {
@@ -243,7 +251,9 @@
     const roll=Math.floor(Math.random()*6)+1;
     await animateDice(roll);
     const st=getStats(playerData[myId]);
-    const newPos=Math.min(st.pos+roll,100);
+    const newPos=calcLanding(st.pos, roll);
+    const stopped=FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll;
+    if(stopped) showStopMessage(newPos);
     const newData={...playerData,[myId]:clampStats({...st,pos:newPos})};
     const nextIndex=(currentPlayerIndex+1)%players.length;
     await sb.from('rooms').update({
@@ -251,6 +261,11 @@
       turn_number:nextIndex===0?turnNumber+1:turnNumber,
     }).eq('id',roomId);
   });
+
+  function showStopMessage(pos){
+    const el=$('dice-result');
+    el.textContent+=`　★ ${pos}マスで強制ストップ！`;
+  }
 
   const DICE_FACE=['⚀','⚁','⚂','⚃','⚄','⚅'];
   async function animateDice(result){
@@ -317,15 +332,17 @@
 
   function squareGrad(num,sx,sy,w,h){
     const g=ctx.createLinearGradient(sx,sy,sx,sy+h);
-    if(num===1)    {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
-    else if(num===100){g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
-    else if(num%10===0){g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
-    else if(num%5===0) {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
-    else               {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
+    if(num===1)         {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
+    else if(num===100)  {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
+    else if(FORCED_STOPS.includes(num)){g.addColorStop(0,'#ffe0e0');g.addColorStop(1,'#f08080');}
+    else if(num%10===0) {g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
+    else if(num%5===0)  {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
+    else                {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
     return g;
   }
   function squareBorder(num){
     if(num===1)return'#2a8a40';if(num===100)return'#c89000';
+    if(FORCED_STOPS.includes(num))return'#c02020';
     if(num%10===0)return'#d06020';if(num%5===0)return'#3a80c0';return'#b89860';
   }
   function rr(x,y,w,h,r){
@@ -336,20 +353,30 @@
     ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
   }
   function drawSquare({num,x,y}){
-    const isGoal=num===100,isStart=num===1;
+    const isGoal=num===100,isStart=num===1,isStop=FORCED_STOPS.includes(num);
     const w=isGoal?GOAL_W:SQ_W,h=isGoal?GOAL_H:SQ_H;
     const sx=x+(SQ_W-w)/2,sy=y+(SQ_H-h)/2;
     ctx.save();ctx.shadowColor='rgba(0,0,0,0.18)';ctx.shadowBlur=6;ctx.shadowOffsetY=2;
     ctx.fillStyle=squareGrad(num,sx,sy,w,h);rr(sx,sy,w,h,6);ctx.fill();ctx.restore();
-    ctx.strokeStyle=squareBorder(num);ctx.lineWidth=isGoal||isStart?2.5:1.5;
+    ctx.strokeStyle=squareBorder(num);ctx.lineWidth=isGoal||isStart||isStop?2.5:1.5;
     rr(sx,sy,w,h,6);ctx.stroke();
     ctx.save();ctx.globalAlpha=0.4;ctx.fillStyle='rgba(255,255,255,0.8)';
     ctx.beginPath();ctx.roundRect(sx+2,sy+2,w-4,h*.35,[6,6,0,0]);ctx.fill();ctx.restore();
     ctx.textAlign='center';ctx.textBaseline='middle';
     const cx=sx+w/2,cy=sy+h/2;
-    if(isGoal){ctx.fillStyle='#8a6000';ctx.font='bold 14px Segoe UI';ctx.fillText('GOAL',cx,cy-12);ctx.font='22px serif';ctx.fillText('🏆',cx,cy+10);}
-    else if(isStart){ctx.fillStyle='#1a6030';ctx.font='bold 12px Segoe UI';ctx.fillText('START',cx,cy);}
-    else{ctx.fillStyle=num%10===0?'#c05010':num%5===0?'#1a60a0':'#7a6040';ctx.font=num%10===0?'bold 12px Segoe UI':'11px Segoe UI';ctx.fillText(num,cx,cy);}
+    if(isGoal){
+      ctx.fillStyle='#8a6000';ctx.font='bold 14px Segoe UI';ctx.fillText('GOAL',cx,cy-12);
+      ctx.font='22px serif';ctx.fillText('🏆',cx,cy+10);
+    } else if(isStart){
+      ctx.fillStyle='#1a6030';ctx.font='bold 12px Segoe UI';ctx.fillText('START',cx,cy);
+    } else if(isStop){
+      ctx.fillStyle='#a00000';ctx.font='bold 11px Segoe UI';ctx.fillText('★STOP',cx,cy-7);
+      ctx.font='10px Segoe UI';ctx.fillText(num,cx,cy+7);
+    } else {
+      ctx.fillStyle=num%10===0?'#c05010':num%5===0?'#1a60a0':'#7a6040';
+      ctx.font=num%10===0?'bold 12px Segoe UI':'11px Segoe UI';
+      ctx.fillText(num,cx,cy);
+    }
   }
   function drawTokens(){
     const byPos={};
