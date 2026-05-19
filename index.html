@@ -14,10 +14,30 @@
     <button id="btn-go">START</button>
   </div>
 
+  <!-- あいことば入力画面 -->
+  <div id="word-screen" class="hidden">
+    <div class="word-card">
+      <p class="word-label">あいことばを入力してください</p>
+      <input
+        id="word-input"
+        type="text"
+        maxlength="20"
+        placeholder="あいことば"
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <p id="word-error" class="word-error"></p>
+      <button id="btn-create">ルームを作成する</button>
+    </div>
+  </div>
+
   <!-- ゲーム画面 -->
   <div id="game-screen" class="hidden">
     <div class="container">
-      <h2>モバイル人生ゲーム</h2>
+      <div class="game-header">
+        <h2>モバイル人生ゲーム</h2>
+        <span id="room-badge"></span>
+      </div>
 
       <div class="stats">
         <span>世代: <strong id="generation">0</strong></span>

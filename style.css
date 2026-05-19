@@ -12,6 +12,18 @@ body {
 }
 
 /* =====================
+   共通ユーティリティ
+===================== */
+.hidden {
+  display: none !important;
+}
+
+.fade-out {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+/* =====================
    タイトル画面
 ===================== */
 #title-screen {
@@ -21,12 +33,7 @@ body {
   justify-content: center;
   min-height: 100vh;
   gap: 60px;
-  transition: opacity 0.6s ease;
-}
-
-#title-screen.fade-out {
-  opacity: 0;
-  pointer-events: none;
+  transition: opacity 0.5s ease;
 }
 
 #title-text {
@@ -64,6 +71,98 @@ body {
 }
 
 /* =====================
+   あいことば入力画面
+===================== */
+#word-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+#word-screen.visible {
+  opacity: 1;
+}
+
+.word-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  background: #132336;
+  border: 1px solid #2a4a6a;
+  border-radius: 16px;
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.word-label {
+  font-size: 1.1rem;
+  color: #a0c8e0;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+#word-input {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 1.4rem;
+  text-align: center;
+  letter-spacing: 0.15em;
+  border: 2px solid #2a4a6a;
+  border-radius: 10px;
+  background: #0d1b2a;
+  color: #a0d8ef;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#word-input:focus {
+  border-color: #a0d8ef;
+}
+
+#word-input::placeholder {
+  color: #2a4a6a;
+  letter-spacing: 0.05em;
+}
+
+.word-error {
+  font-size: 0.85rem;
+  color: #e07070;
+  min-height: 1.2em;
+  text-align: center;
+}
+
+#btn-create {
+  width: 100%;
+  padding: 14px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  border: none;
+  border-radius: 10px;
+  background: #a0d8ef;
+  color: #0d1b2a;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
+  box-shadow: 0 0 16px rgba(160, 216, 239, 0.3);
+}
+
+#btn-create:hover {
+  background: #c8eaf8;
+  box-shadow: 0 0 28px rgba(160, 216, 239, 0.5);
+}
+
+#btn-create:active {
+  transform: scale(0.98);
+}
+
+/* =====================
    ゲーム画面
 ===================== */
 #game-screen {
@@ -72,11 +171,7 @@ body {
   min-height: 100vh;
   padding: 20px;
   opacity: 0;
-  transition: opacity 0.6s ease;
-}
-
-#game-screen.hidden {
-  display: none;
+  transition: opacity 0.5s ease;
 }
 
 #game-screen.visible {
@@ -92,11 +187,28 @@ body {
   max-width: 900px;
 }
 
+.game-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 h2 {
   font-size: 1.5rem;
   font-weight: 700;
   color: #a0d8ef;
-  text-align: center;
+  letter-spacing: 0.05em;
+}
+
+#room-badge {
+  padding: 4px 14px;
+  border-radius: 20px;
+  background: #1a3a5a;
+  border: 1px solid #2a5a8a;
+  font-size: 0.85rem;
+  color: #80c0e0;
   letter-spacing: 0.05em;
 }
 

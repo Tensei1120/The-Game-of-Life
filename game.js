@@ -1,21 +1,43 @@
 (function () {
-  // --- タイトル → ゲーム画面の切り替え ---
+  // --- 画面要素 ---
   const titleScreen = document.getElementById('title-screen');
+  const wordScreen  = document.getElementById('word-screen');
   const gameScreen  = document.getElementById('game-screen');
 
+  function fadeOut(el, cb) {
+    el.classList.add('fade-out');
+    setTimeout(() => { el.classList.add('hidden'); cb(); }, 500);
+  }
+
+  function fadeIn(el) {
+    el.classList.remove('hidden');
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('visible')));
+  }
+
+  // タイトル → あいことば画面
   document.getElementById('btn-go').addEventListener('click', () => {
-    titleScreen.classList.add('fade-out');
-    setTimeout(() => {
-      titleScreen.style.display = 'none';
-      gameScreen.classList.remove('hidden');
-      // display が none → flex に切り替わった直後にクラスを付けて fade-in
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          gameScreen.classList.add('visible');
-        });
-      });
-    }, 600);
+    fadeOut(titleScreen, () => fadeIn(wordScreen));
   });
+
+  // あいことば → ゲーム画面
+  const wordInput  = document.getElementById('word-input');
+  const wordError  = document.getElementById('word-error');
+  const roomBadge  = document.getElementById('room-badge');
+
+  document.getElementById('btn-create').addEventListener('click', createRoom);
+  wordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') createRoom(); });
+
+  function createRoom() {
+    const word = wordInput.value.trim();
+    if (!word) {
+      wordError.textContent = 'あいことばを入力してください';
+      wordInput.focus();
+      return;
+    }
+    wordError.textContent = '';
+    roomBadge.textContent = 'ルーム: ' + word;
+    fadeOut(wordScreen, () => { fadeIn(gameScreen); draw(); });
+  }
 
   // --- ゲームロジック ---
   const canvas = document.getElementById('canvas');
@@ -126,7 +148,7 @@
   }
 
   function cellFromEvent(e) {
-    const rect  = canvas.getBoundingClientRect();
+    const rect   = canvas.getBoundingClientRect();
     const scaleX = COLS / rect.width;
     const scaleY = ROWS / rect.height;
     return {
@@ -173,7 +195,6 @@
     draw();
   }
 
-  // コントロール
   document.getElementById('btn-start').addEventListener('click', () => running ? stop() : start());
   document.getElementById('btn-step').addEventListener('click', () => { stop(); nextGeneration(); draw(); });
   document.getElementById('btn-random').addEventListener('click', () => {
@@ -192,7 +213,6 @@
     btn.addEventListener('click', () => placePreset(btn.dataset.preset))
   );
 
-  // マウス描画
   canvas.addEventListener('mousedown', (e) => {
     drawing = true;
     const { r, c } = cellFromEvent(e);
@@ -205,7 +225,6 @@
   });
   window.addEventListener('mouseup', () => { drawing = false; });
 
-  // タッチ描画
   canvas.addEventListener('touchstart', (e) => {
     e.preventDefault(); drawing = true;
     const { r, c } = cellFromEvent(e.touches[0]);
@@ -217,6 +236,4 @@
     if (r >= 0 && r < ROWS && c >= 0 && c < COLS) { grid[r][c] = drawValue; draw(); }
   }, { passive: false });
   window.addEventListener('touchend', () => { drawing = false; });
-
-  draw();
 }());
