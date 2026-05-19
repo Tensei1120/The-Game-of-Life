@@ -5,7 +5,11 @@
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
   const CW=1120, CH=930, SQ_W=64, SQ_H=48, GOAL_W=94, GOAL_H=70;
-  const PLAYER_COLORS = ['#1565c0','#c62828','#2e7d32','#e65100','#6a1b9a','#00838f'];
+  const MAX_PLAYERS = 9;
+  const PLAYER_COLORS = [
+    '#1565c0','#c62828','#2e7d32','#e65100',
+    '#6a1b9a','#00838f','#f9a825','#ad1457','#37474f'
+  ];
 
   const WAYPOINTS = [
     [ 80,865],[215,878],[365,862],[515,878],[665,862],[820,875],[970,862],
@@ -85,8 +89,17 @@
         const {error}=await sb.from('rooms').insert({id:roomId,host_id:myId,alive_cells:{}});
         if(error)throw error; isHost=true;
       } else {isHost=roomData.host_id===myId;}
-      const {data:ep}=await sb.from('room_players').select('color').eq('room_id',roomId);
-      const usedColors=(ep||[]).map(p=>p.color);
+
+      // 人数上限チェック
+      const {data:ep}=await sb.from('room_players').select('player_id,color').eq('room_id',roomId);
+      const existingPlayers=ep||[];
+      const alreadyIn=existingPlayers.some(p=>p.player_id===myId);
+      if(!alreadyIn && existingPlayers.length>=MAX_PLAYERS){
+        wordError.textContent=`このルームは満員です（最大${MAX_PLAYERS}人）`;
+        return;
+      }
+
+      const usedColors=existingPlayers.map(p=>p.color);
       const myColor=PLAYER_COLORS.find(c=>!usedColors.includes(c))||PLAYER_COLORS[0];
       const {error:pe}=await sb.from('room_players').upsert(
         {room_id:roomId,player_id:myId,player_name:myName,color:myColor,is_host:isHost},
@@ -122,8 +135,10 @@
     $('player-list').innerHTML=players.map(p=>`
       <li class="player-item">
         <span class="player-dot" style="background:${p.color}"></span>
-        <span class="player-name">${p.player_name}${p.is_host?' 👑':''}</span>
+        <span class="player-name">${p.player_name}${p.is_host?' 👑':''}${p.player_id===myId?' (自分)':''}</span>
       </li>`).join('');
+    const remaining=MAX_PLAYERS-players.length;
+    $('lobby-capacity').textContent=`あと${remaining}人参加できます（最大${MAX_PLAYERS}人）`;
     $('btn-lobby-start').style.display=isHost?'block':'none';
     $('lobby-hint').style.display=isHost?'none':'block';
   }
@@ -190,22 +205,24 @@
     $('player-status-area').innerHTML=players.map((p,i)=>{
       const st=getStats(playerData[p.player_id]);
       const jobLabel=st.job||'未定';
+      const isMine=p.player_id===myId;
       const itemsHtml=st.items.map(item=>
         item
           ? `<div class="item-slot filled" title="${item}">${item}</div>`
           : `<div class="item-slot">∅</div>`
       ).join('');
       return `
-        <div class="psc${i===activeIdx?' psc-active':''}">
+        <div class="psc${i===activeIdx?' psc-active':''}${isMine?' psc-mine':''}">
           <div class="psc-header">
             <span class="psc-dot" style="background:${p.color}"></span>
-            <span class="psc-name">${p.player_name}${p.is_host?' 👑':''}</span>
+            <span class="psc-name">${p.player_name}${p.is_host?' 👑':''}${isMine?' <span class="psc-self">自分</span>':''}</span>
             <span class="psc-job">💼 ${jobLabel}</span>
           </div>
           <div class="psc-stats">
             <span class="psc-stat">💰 <span class="psc-stat-val">${st.money}万円</span></span>
             <span class="psc-stat">😊 <span class="psc-stat-val">${st.happiness}</span></span>
             <span class="psc-stat">❤️ <span class="psc-stat-val">${st.health}</span></span>
+            <span class="psc-stat">📍 <span class="psc-stat-val">${st.pos}マス</span></span>
           </div>
           <div class="psc-items">${itemsHtml}</div>
         </div>`;
