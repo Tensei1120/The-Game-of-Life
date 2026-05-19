@@ -4,103 +4,87 @@
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
-  const CW     = 1120;
-  const CH     = 930;
-  const SQ_W   = 64;
-  const SQ_H   = 48;
-  const GOAL_W = 94;
-  const GOAL_H = 70;
-
+  const CW=1120, CH=930, SQ_W=64, SQ_H=48, GOAL_W=94, GOAL_H=70;
   const PLAYER_COLORS = ['#1565c0','#c62828','#2e7d32','#e65100','#6a1b9a','#00838f'];
 
   const WAYPOINTS = [
-    [ 80, 865],
-    [215, 878], [365, 862], [515, 878], [665, 862], [820, 875], [970, 862],
-    [1055, 790], [1060, 695], [1055, 600],
-    [940, 535], [775, 518], [615, 530], [455, 518], [295, 530], [145, 518],
-    [ 68, 450], [ 72, 358],
-    [165, 290], [325, 272], [485, 285], [645, 272], [805, 285], [960, 272],
-    [1052, 205], [1056, 122],
-    [958, 58], [795, 44], [630, 56], [470, 44], [310, 56], [158, 46],
-    [ 76,  80],
+    [ 80,865],[215,878],[365,862],[515,878],[665,862],[820,875],[970,862],
+    [1055,790],[1060,695],[1055,600],
+    [940,535],[775,518],[615,530],[455,518],[295,530],[145,518],
+    [68,450],[72,358],
+    [165,290],[325,272],[485,285],[645,272],[805,285],[960,272],
+    [1052,205],[1056,122],
+    [958,58],[795,44],[630,56],[470,44],[310,56],[158,46],[76,80],
   ];
 
   let myId = sessionStorage.getItem('gol_pid');
   if (!myId) { myId = crypto.randomUUID(); sessionStorage.setItem('gol_pid', myId); }
 
-  let myName='', roomId='', players=[], isHost=false, playerPositions={};
+  let myName='', roomId='', players=[], isHost=false, playerData={};
   let currentPlayerIndex=0, turnNumber=0, isMyTurn=false, rolling=false, channel=null;
 
-  const squares = buildSquares();
+  function defaultStats(pos=1) {
+    return { pos, money:0, happiness:50, health:50, items:Array(6).fill(null), job:null };
+  }
+  function getPos(d)   { return typeof d==='object'&&d!==null ? d.pos   : (d||1); }
+  function getStats(d) { return typeof d==='object'&&d!==null ? d : defaultStats(d||1); }
 
+  const squares = buildSquares();
   function buildSquares() {
-    const segLens = [];
-    let total = 0;
-    for (let i = 1; i < WAYPOINTS.length; i++) {
-      const dx = WAYPOINTS[i][0]-WAYPOINTS[i-1][0], dy = WAYPOINTS[i][1]-WAYPOINTS[i-1][1];
-      const len = Math.sqrt(dx*dx+dy*dy);
-      segLens.push(len); total += len;
+    const segLens=[]; let total=0;
+    for (let i=1;i<WAYPOINTS.length;i++) {
+      const dx=WAYPOINTS[i][0]-WAYPOINTS[i-1][0], dy=WAYPOINTS[i][1]-WAYPOINTS[i-1][1];
+      const len=Math.sqrt(dx*dx+dy*dy); segLens.push(len); total+=len;
     }
-    const spacing = total / 99, sqs = [];
-    for (let n = 0; n < 100; n++) {
-      const target = n * spacing;
-      let traveled = 0, seg = 0;
-      while (seg < segLens.length-1 && traveled+segLens[seg] < target) traveled += segLens[seg++];
-      const t = segLens[seg]>0 ? Math.min((target-traveled)/segLens[seg],1) : 0;
+    const spacing=total/99, sqs=[];
+    for (let n=0;n<100;n++) {
+      const target=n*spacing; let traveled=0, seg=0;
+      while (seg<segLens.length-1&&traveled+segLens[seg]<target) traveled+=segLens[seg++];
+      const t=segLens[seg]>0?Math.min((target-traveled)/segLens[seg],1):0;
       const p0=WAYPOINTS[seg], p1=WAYPOINTS[Math.min(seg+1,WAYPOINTS.length-1)];
-      sqs.push({ num:n+1, x:p0[0]+(p1[0]-p0[0])*t-SQ_W/2, y:p0[1]+(p1[1]-p0[1])*t-SQ_H/2 });
+      sqs.push({num:n+1, x:p0[0]+(p1[0]-p0[0])*t-SQ_W/2, y:p0[1]+(p1[1]-p0[1])*t-SQ_H/2});
     }
     return sqs;
   }
 
-  const $ = id => document.getElementById(id);
+  const $=id=>document.getElementById(id);
+  function fadeOut(el,cb){el.classList.add('fade-out');setTimeout(()=>{el.classList.add('hidden');cb&&cb();},500);}
+  function fadeIn(el){el.classList.remove('hidden');requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('visible')));}
+  const SCREENS=['title-screen','word-screen','lobby-screen','game-screen'];
+  function showScreen(id){SCREENS.forEach(sid=>{const el=$(sid);if(sid===id)fadeIn(el);else if(!el.classList.contains('hidden'))fadeOut(el);});}
 
-  function fadeOut(el,cb) { el.classList.add('fade-out'); setTimeout(()=>{ el.classList.add('hidden'); cb&&cb(); },500); }
-  function fadeIn(el) { el.classList.remove('hidden'); requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('visible'))); }
-  const SCREENS = ['title-screen','word-screen','lobby-screen','game-screen'];
-  function showScreen(id) {
-    SCREENS.forEach(sid => {
-      const el=$(sid);
-      if (sid===id) fadeIn(el);
-      else if (!el.classList.contains('hidden')) fadeOut(el);
-    });
-  }
+  $('btn-go').addEventListener('click',()=>showScreen('word-screen'));
 
-  $('btn-go').addEventListener('click', ()=>showScreen('word-screen'));
-
-  const nameInput=$('name-input'), wordInput=$('word-input'), wordError=$('word-error');
-  $('btn-create').addEventListener('click', enterRoom);
-  nameInput.addEventListener('keydown', e=>e.key==='Enter'&&wordInput.focus());
-  wordInput.addEventListener('keydown', e=>e.key==='Enter'&&enterRoom());
+  const nameInput=$('name-input'),wordInput=$('word-input'),wordError=$('word-error');
+  $('btn-create').addEventListener('click',enterRoom);
+  nameInput.addEventListener('keydown',e=>e.key==='Enter'&&wordInput.focus());
+  wordInput.addEventListener('keydown',e=>e.key==='Enter'&&enterRoom());
 
   async function enterRoom() {
-    if (!isConfigured) { wordError.innerHTML='Supabaseが未設定です。<br>config.jsを書き換えてください。'; return; }
-    const name=nameInput.value.trim(), word=wordInput.value.trim();
-    if (!name) { wordError.textContent='名前を入力してください'; nameInput.focus(); return; }
-    if (!word) { wordError.textContent='あいことばを入力してください'; wordInput.focus(); return; }
+    if (!isConfigured){wordError.innerHTML='Supabaseが未設定です。<br>config.jsを書き換えてください。';return;}
+    const name=nameInput.value.trim(),word=wordInput.value.trim();
+    if(!name){wordError.textContent='名前を入力してください';nameInput.focus();return;}
+    if(!word){wordError.textContent='あいことばを入力してください';wordInput.focus();return;}
     wordError.textContent='';
-    const btn=$('btn-create');
-    btn.disabled=true; btn.textContent='接続中...';
-    myName=name;
-    roomId=word.toLowerCase().replace(/\s+/g,'-');
+    const btn=$('btn-create'); btn.disabled=true; btn.textContent='接続中...';
+    myName=name; roomId=word.toLowerCase().replace(/\s+/g,'-');
     try {
       const {data:existing,error:fe}=await sb.from('rooms').select('id,host_id,status,created_at').eq('id',roomId).maybeSingle();
-      if (fe) throw fe;
+      if(fe)throw fe;
       let roomData=existing;
-      if (roomData) {
+      if(roomData){
         const ageMs=Date.now()-new Date(roomData.created_at).getTime();
         const isStale=roomData.status==='closed'||(roomData.host_id!==myId&&roomData.status==='waiting'&&ageMs>3*60*1000);
-        if (isStale) {
+        if(isStale){
           const {error:delErr}=await sb.from('rooms').delete().eq('id',roomId);
-          if (delErr) { console.warn('DELETE failed:',delErr.message); await sb.from('rooms').update({status:'closed'}).eq('id',roomId); }
+          if(delErr){console.warn('DELETE failed:',delErr.message);await sb.from('rooms').update({status:'closed'}).eq('id',roomId);}
           roomData=null;
         }
       }
-      if (!roomData) {
+      if(!roomData){
         const {error}=await sb.from('rooms').insert({id:roomId,host_id:myId,alive_cells:{}});
-        if (error) throw error;
-        isHost=true;
-      } else { isHost=roomData.host_id===myId; }
+        if(error)throw error; isHost=true;
+      } else {isHost=roomData.host_id===myId;}
       const {data:ep}=await sb.from('room_players').select('color').eq('room_id',roomId);
       const usedColors=(ep||[]).map(p=>p.color);
       const myColor=PLAYER_COLORS.find(c=>!usedColors.includes(c))||PLAYER_COLORS[0];
@@ -108,22 +92,20 @@
         {room_id:roomId,player_id:myId,player_name:myName,color:myColor,is_host:isHost},
         {onConflict:'room_id,player_id'}
       );
-      if (pe) throw pe;
-      if (isHost) window.addEventListener('beforeunload',dissolveRoom);
-      await refreshPlayers();
-      subscribeRoom();
-      showScreen('lobby-screen');
-    } catch(err) {
+      if(pe)throw pe;
+      if(isHost)window.addEventListener('beforeunload',dissolveRoom);
+      await refreshPlayers(); subscribeRoom(); showScreen('lobby-screen');
+    } catch(err){
       console.error(err);
       const msg=err?.message||'';
-      if (msg.includes('Failed to fetch')||msg.includes('NetworkError')) wordError.textContent='ネットワークエラー。SUPABASE_URLを確認してください。';
-      else if (msg.includes('Invalid API key')||msg.includes('apikey')) wordError.textContent='APIキーが正しくありません。';
+      if(msg.includes('Failed to fetch')||msg.includes('NetworkError'))wordError.textContent='ネットワークエラー。';
+      else if(msg.includes('Invalid API key')||msg.includes('apikey'))wordError.textContent='APIキーエラー。';
       else wordError.textContent='接続エラー: '+(msg||'コンソールを確認してください。');
-    } finally { btn.disabled=false; btn.textContent='ルームに入る'; }
+    } finally{btn.disabled=false;btn.textContent='ルームに入る';}
   }
 
-  function dissolveRoom() {
-    if (!isHost||!roomId) return;
+  function dissolveRoom(){
+    if(!isHost||!roomId)return;
     fetch(`${SUPABASE_URL}/rest/v1/rooms?id=eq.${encodeURIComponent(roomId)}`,{
       method:'DELETE',
       headers:{'apikey':SUPABASE_ANON,'Authorization':`Bearer ${SUPABASE_ANON}`,'Prefer':'return=minimal'},
@@ -131,11 +113,11 @@
     });
   }
 
-  async function refreshPlayers() {
+  async function refreshPlayers(){
     const {data}=await sb.from('room_players').select('*').eq('room_id',roomId).order('joined_at');
     players=data||[]; renderLobby();
   }
-  function renderLobby() {
+  function renderLobby(){
     $('lobby-room-name').textContent='ルーム: '+roomId;
     $('player-list').innerHTML=players.map(p=>`
       <li class="player-item">
@@ -146,11 +128,12 @@
     $('lobby-hint').style.display=isHost?'none':'block';
   }
   $('btn-lobby-start').addEventListener('click',async()=>{
-    const initPos={}; players.forEach(p=>{initPos[p.player_id]=1;});
-    await sb.from('rooms').update({status:'playing',alive_cells:initPos}).eq('id',roomId);
+    const initData={};
+    players.forEach(p=>{initData[p.player_id]=defaultStats(1);});
+    await sb.from('rooms').update({status:'playing',alive_cells:initData}).eq('id',roomId);
   });
 
-  function subscribeRoom() {
+  function subscribeRoom(){
     channel=sb.channel('room-'+roomId)
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},p=>onRoomChange(p.new))
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},()=>{if(!isHost)showDissolutionOverlay();})
@@ -158,280 +141,217 @@
       .subscribe();
   }
 
-  async function onRoomChange(room) {
-    if (!room) return;
-    if (room.status==='playing') {
+  async function onRoomChange(room){
+    if(!room)return;
+    if(room.status==='playing'){
       const {data}=await sb.from('room_players').select('*').eq('room_id',roomId).order('joined_at');
       players=data||[];
-      if ($('game-screen').classList.contains('hidden')) {
+      if($('game-screen').classList.contains('hidden')){
         $('room-badge').textContent='ルーム: '+roomId;
         applyRoomState(room); showScreen('game-screen');
-      } else { applyRoomState(room); }
+      } else {applyRoomState(room);}
     }
   }
 
-  function showDissolutionOverlay() {
+  function showDissolutionOverlay(){
     $('dissolution-overlay').classList.remove('hidden');
     setTimeout(()=>{
       $('dissolution-overlay').classList.add('hidden');
-      roomId=''; players=[]; isHost=false; playerPositions={};
-      nameInput.value=''; wordInput.value='';
+      roomId='';players=[];isHost=false;playerData={};
+      nameInput.value='';wordInput.value='';
       showScreen('title-screen');
     },3000);
   }
 
-  const canvas=$('board-canvas'), ctx=canvas.getContext('2d');
+  const canvas=$('board-canvas'),ctx=canvas.getContext('2d');
   canvas.width=CW; canvas.height=CH;
 
-  function applyRoomState(room) {
-    playerPositions=room.alive_cells||{};
+  function applyRoomState(room){
+    playerData=room.alive_cells||{};
     currentPlayerIndex=room.current_player_index||0;
     turnNumber=room.turn_number||0;
     updateTurnUI(); drawBoard();
   }
 
-  function updateTurnUI() {
-    if (!players.length) return;
+  function updateTurnUI(){
+    if(!players.length)return;
     const idx=currentPlayerIndex%players.length, cp=players[idx];
     isMyTurn=cp?.player_id===myId;
     const ind=$('turn-indicator');
-    if (isMyTurn) { ind.textContent='あなたのターンです！'; ind.style.color='#228844'; }
-    else { ind.textContent=(cp?.player_name||'?')+' のターン'; ind.style.color=cp?.color||'#1565c0'; }
+    if(isMyTurn){ind.textContent='あなたのターンです！';ind.style.color='#228844';}
+    else{ind.textContent=(cp?.player_name||'?')+' のターン';ind.style.color=cp?.color||'#1565c0';}
     const rb=$('btn-roll');
-    rb.style.display=isMyTurn?'block':'none'; rb.disabled=false; rolling=false;
+    rb.style.display=isMyTurn?'block':'none';rb.disabled=false;rolling=false;
     $('turn-number').textContent=turnNumber;
-    $('game-player-list').innerHTML=players.map((p,i)=>{
-      const pos=playerPositions[p.player_id]||1;
-      return `<li class="gpl-item ${i===idx?'gpl-active':''}">
-        <span class="player-dot" style="background:${p.color}"></span>
-        <span>${p.player_name}</span>
-        <span style="color:${p.color};margin-left:4px">${pos}マス</span>
-      </li>`;
+    renderPlayerStatusCards(idx);
+  }
+
+  function renderPlayerStatusCards(activeIdx){
+    $('player-status-area').innerHTML=players.map((p,i)=>{
+      const st=getStats(playerData[p.player_id]);
+      const jobLabel=st.job||'未定';
+      const itemsHtml=st.items.map(item=>
+        item
+          ? `<div class="item-slot filled" title="${item}">${item}</div>`
+          : `<div class="item-slot">∅</div>`
+      ).join('');
+      return `
+        <div class="psc${i===activeIdx?' psc-active':''}">
+          <div class="psc-header">
+            <span class="psc-dot" style="background:${p.color}"></span>
+            <span class="psc-name">${p.player_name}${p.is_host?' 👑':''}</span>
+            <span class="psc-job">💼 ${jobLabel}</span>
+          </div>
+          <div class="psc-stats">
+            <span class="psc-stat">💰 <span class="psc-stat-val">${st.money}万円</span></span>
+            <span class="psc-stat">😊 <span class="psc-stat-val">${st.happiness}</span></span>
+            <span class="psc-stat">❤️ <span class="psc-stat-val">${st.health}</span></span>
+          </div>
+          <div class="psc-items">${itemsHtml}</div>
+        </div>`;
     }).join('');
   }
 
   $('btn-roll').addEventListener('click',async()=>{
-    if (!isMyTurn||rolling) return;
+    if(!isMyTurn||rolling)return;
     rolling=true; $('btn-roll').disabled=true;
     const roll=Math.floor(Math.random()*6)+1;
     await animateDice(roll);
-    const curPos=playerPositions[myId]||1, newPos=Math.min(curPos+roll,100);
-    const newPositions={...playerPositions,[myId]:newPos};
+    const st=getStats(playerData[myId]);
+    const newPos=Math.min(st.pos+roll,100);
+    const newData={...playerData,[myId]:{...st,pos:newPos}};
     const nextIndex=(currentPlayerIndex+1)%players.length;
     await sb.from('rooms').update({
-      alive_cells:newPositions, current_player_index:nextIndex,
+      alive_cells:newData, current_player_index:nextIndex,
       turn_number:nextIndex===0?turnNumber+1:turnNumber,
     }).eq('id',roomId);
   });
 
   const DICE_FACE=['⚀','⚁','⚂','⚃','⚄','⚅'];
-  async function animateDice(result) {
+  async function animateDice(result){
     const el=$('dice-result');
-    for (let i=0;i<10;i++) { el.textContent=DICE_FACE[Math.floor(Math.random()*6)]; await sleep(60); }
+    for(let i=0;i<10;i++){el.textContent=DICE_FACE[Math.floor(Math.random()*6)];await sleep(60);}
     el.textContent=DICE_FACE[result-1]+'　'+result+'マス進む！';
   }
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
   // ── ボード描画 ──
-  function drawBoard() {
-    drawSky();
-    drawMountains();
-    drawRoad();
-    squares.forEach(drawSquare);
-    drawTokens();
-  }
+  function drawBoard(){drawSky();drawMountains();drawRoad();squares.forEach(drawSquare);drawTokens();}
 
-  function drawSky() {
-    // 天空グラデーション
+  function drawSky(){
     const sky=ctx.createLinearGradient(0,0,0,CH);
-    sky.addColorStop(0,'#2a72c8');
-    sky.addColorStop(0.35,'#5aaae0');
-    sky.addColorStop(0.65,'#87ceeb');
-    sky.addColorStop(0.82,'#c8eedd');
-    sky.addColorStop(1,'#a8d870');
+    sky.addColorStop(0,'#2a72c8'); sky.addColorStop(0.35,'#5aaae0');
+    sky.addColorStop(0.65,'#87ceeb'); sky.addColorStop(0.82,'#c8eedd'); sky.addColorStop(1,'#a8d870');
     ctx.fillStyle=sky; ctx.fillRect(0,0,CW,CH);
-
-    // 雲
-    drawCloud(160, 60, 1.0);
-    drawCloud(420, 40, 0.8);
-    drawCloud(700, 70, 1.2);
-    drawCloud(960, 45, 0.9);
-    drawCloud(280, 110, 0.65);
-    drawCloud(820, 100, 0.75);
+    drawCloud(160,60,1.0);drawCloud(420,40,0.8);drawCloud(700,70,1.2);
+    drawCloud(960,45,0.9);drawCloud(280,110,0.65);drawCloud(820,100,0.75);
   }
-
-  function drawCloud(cx,cy,sc) {
-    ctx.save();
-    ctx.fillStyle='rgba(255,255,255,0.82)';
-    ctx.shadowColor='rgba(180,220,255,0.4)';
-    ctx.shadowBlur=12;
+  function drawCloud(cx,cy,sc){
+    ctx.save(); ctx.fillStyle='rgba(255,255,255,0.82)';
+    ctx.shadowColor='rgba(180,220,255,0.4)'; ctx.shadowBlur=12;
     [[0,0,32],[28,6,22],[-22,6,20],[10,-16,26],[-8,-10,18]].forEach(([dx,dy,r])=>{
-      ctx.beginPath(); ctx.arc(cx+dx*sc,cy+dy*sc,r*sc,0,Math.PI*2); ctx.fill();
+      ctx.beginPath();ctx.arc(cx+dx*sc,cy+dy*sc,r*sc,0,Math.PI*2);ctx.fill();
     });
     ctx.restore();
   }
-
-  // 山のレイヤーデータ [x,y] の山行
-  function drawMountainLayer(peaks, fillColor, snowLine) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(0,CH);
+  function drawMountainLayer(peaks,fillColor,snowLine){
+    ctx.save(); ctx.beginPath(); ctx.moveTo(0,CH);
     ctx.lineTo(peaks[0][0],peaks[0][1]);
-    for (let i=1;i<peaks.length;i++) {
-      const mx=(peaks[i-1][0]+peaks[i][0])/2, my=(peaks[i-1][1]+peaks[i][1])/2;
+    for(let i=1;i<peaks.length;i++){
+      const mx=(peaks[i-1][0]+peaks[i][0])/2,my=(peaks[i-1][1]+peaks[i][1])/2;
       ctx.quadraticCurveTo(peaks[i-1][0],peaks[i-1][1],mx,my);
     }
     ctx.lineTo(peaks[peaks.length-1][0],peaks[peaks.length-1][1]);
-    ctx.lineTo(CW,CH);
-    ctx.closePath();
-    ctx.fillStyle=fillColor;
-    ctx.fill();
-
-    // 雪帽
-    if (snowLine) {
+    ctx.lineTo(CW,CH); ctx.closePath(); ctx.fillStyle=fillColor; ctx.fill();
+    if(snowLine){
       ctx.beginPath();
-      peaks.forEach(([px,py],i)=>{
-        if (py<snowLine) {
-          const spread=40;
-          ctx.moveTo(px-spread,py+30);
-          ctx.lineTo(px,py-4);
-          ctx.lineTo(px+spread,py+30);
-        }
-      });
-      ctx.fillStyle='rgba(255,255,255,0.75)';
-      ctx.fill();
+      peaks.forEach(([px,py])=>{ if(py<snowLine){const s=40;ctx.moveTo(px-s,py+30);ctx.lineTo(px,py-4);ctx.lineTo(px+s,py+30);} });
+      ctx.fillStyle='rgba(255,255,255,0.75)'; ctx.fill();
     }
     ctx.restore();
   }
-
-  function drawMountains() {
-    // 遠山（1）淡いラベンダー
-    drawMountainLayer([
-      [0,380],[120,280],[260,340],[400,260],[540,310],[680,255],[820,295],[960,260],[1120,310]
-    ],'#b8cce8');
-
-    // 遠山（2）青グレー
-    drawMountainLayer([
-      [0,450],[100,370],[240,420],[380,355],[530,400],[680,348],[830,385],[980,355],[1120,400]
-    ],'#90aacc', 375);
-
-    // 中山（3）青い山
-    drawMountainLayer([
-      [0,520],[80,455],[200,495],[350,440],[500,475],[650,432],[800,462],[950,440],[1120,480]
-    ],'#6888b0', 450);
-
-    // 近山（4）法面の森林
-    drawMountainLayer([
-      [0,630],[90,575],[210,605],[360,568],[510,590],[660,562],[810,582],[960,566],[1120,600]
-    ],'#3a7030');
-
-    // 近景の草原
-    drawMountainLayer([
-      [0,760],[140,730],[300,748],[480,725],[640,740],[800,722],[960,738],[1120,750]
-    ],'#5a9040');
+  function drawMountains(){
+    drawMountainLayer([[0,380],[120,280],[260,340],[400,260],[540,310],[680,255],[820,295],[960,260],[1120,310]],'#b8cce8');
+    drawMountainLayer([[0,450],[100,370],[240,420],[380,355],[530,400],[680,348],[830,385],[980,355],[1120,400]],'#90aacc',375);
+    drawMountainLayer([[0,520],[80,455],[200,495],[350,440],[500,475],[650,432],[800,462],[950,440],[1120,480]],'#6888b0',450);
+    drawMountainLayer([[0,630],[90,575],[210,605],[360,568],[510,590],[660,562],[810,582],[960,566],[1120,600]],'#3a7030');
+    drawMountainLayer([[0,760],[140,730],[300,748],[480,725],[640,740],[800,722],[960,738],[1120,750]],'#5a9040');
   }
-
-  function drawRoad() {
+  function drawRoad(){
     const roadW=SQ_H+30;
-    ctx.save();
-    ctx.lineJoin='round'; ctx.lineCap='round';
-    // 路盤の影
-    ctx.lineWidth=roadW+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; traceWay(); ctx.stroke();
-    // 路盤本体（温かいベージュ）
-    ctx.lineWidth=roadW+4; ctx.strokeStyle='#c8a060'; traceWay(); ctx.stroke();
-    ctx.lineWidth=roadW;   ctx.strokeStyle='#ddb870'; traceWay(); ctx.stroke();
-    // 路の内側の明るさ
-    ctx.lineWidth=roadW-14; ctx.strokeStyle='rgba(255,235,180,0.35)'; traceWay(); ctx.stroke();
-    // 中央線画
-    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)';
-    ctx.setLineDash([18,22]); traceWay(); ctx.stroke(); ctx.setLineDash([]);
+    ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.lineWidth=roadW+14;ctx.strokeStyle='rgba(100,70,30,0.35)';traceWay();ctx.stroke();
+    ctx.lineWidth=roadW+4;ctx.strokeStyle='#c8a060';traceWay();ctx.stroke();
+    ctx.lineWidth=roadW;ctx.strokeStyle='#ddb870';traceWay();ctx.stroke();
+    ctx.lineWidth=roadW-14;ctx.strokeStyle='rgba(255,235,180,0.35)';traceWay();ctx.stroke();
+    ctx.lineWidth=2;ctx.strokeStyle='rgba(255,255,255,0.55)';
+    ctx.setLineDash([18,22]);traceWay();ctx.stroke();ctx.setLineDash([]);
     ctx.restore();
   }
-  function traceWay() {
-    ctx.beginPath();
-    WAYPOINTS.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));
-  }
+  function traceWay(){ctx.beginPath();WAYPOINTS.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));}
 
-  function squareGrad(num,sx,sy,w,h) {
+  function squareGrad(num,sx,sy,w,h){
     const g=ctx.createLinearGradient(sx,sy,sx,sy+h);
-    if      (num===1)      { g.addColorStop(0,'#c8f0c0'); g.addColorStop(1,'#90d080'); }
-    else if (num===100)    { g.addColorStop(0,'#fff080'); g.addColorStop(1,'#f0c020'); }
-    else if (num%10===0)   { g.addColorStop(0,'#ffe0c0'); g.addColorStop(1,'#f0a060'); }
-    else if (num%5===0)    { g.addColorStop(0,'#d0eaff'); g.addColorStop(1,'#90c8f0'); }
-    else                   { g.addColorStop(0,'#fffdf5'); g.addColorStop(1,'#f0e8d4'); }
+    if(num===1)    {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
+    else if(num===100){g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
+    else if(num%10===0){g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
+    else if(num%5===0) {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
+    else               {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
     return g;
   }
-  function squareBorder(num) {
-    if (num===1)       return '#2a8a40';
-    if (num===100)     return '#c89000';
-    if (num%10===0)    return '#d06020';
-    if (num%5===0)     return '#3a80c0';
-    return '#b89860';
+  function squareBorder(num){
+    if(num===1)return'#2a8a40';if(num===100)return'#c89000';
+    if(num%10===0)return'#d06020';if(num%5===0)return'#3a80c0';return'#b89860';
   }
-  function rr(x,y,w,h,r) {
-    ctx.beginPath();
-    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
-    ctx.arcTo(x+w,y,x+w,y+r,r); ctx.lineTo(x+w,y+h-r);
-    ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
-    ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r);
-    ctx.arcTo(x,y,x+r,y,r); ctx.closePath();
+  function rr(x,y,w,h,r){
+    ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);
+    ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);
+    ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);
+    ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);
+    ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
   }
-  function drawSquare({num,x,y}) {
-    const isGoal=num===100, isStart=num===1;
-    const w=isGoal?GOAL_W:SQ_W, h=isGoal?GOAL_H:SQ_H;
-    const sx=x+(SQ_W-w)/2, sy=y+(SQ_H-h)/2;
-    const border=squareBorder(num);
-    ctx.save();
-    ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
-    ctx.fillStyle=squareGrad(num,sx,sy,w,h); rr(sx,sy,w,h,6); ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle=border; ctx.lineWidth=isGoal||isStart?2.5:1.5;
-    rr(sx,sy,w,h,6); ctx.stroke();
-    // トップハイライト
-    ctx.save(); ctx.globalAlpha=0.4; ctx.fillStyle='rgba(255,255,255,0.8)';
-    ctx.beginPath(); ctx.roundRect(sx+2,sy+2,w-4,h*.35,[6,6,0,0]); ctx.fill(); ctx.restore();
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    const cx=sx+w/2, cy=sy+h/2;
-    if (isGoal) {
-      ctx.fillStyle='#8a6000'; ctx.font='bold 14px Segoe UI'; ctx.fillText('GOAL',cx,cy-12);
-      ctx.font='22px serif'; ctx.fillText('🏆',cx,cy+10);
-    } else if (isStart) {
-      ctx.fillStyle='#1a6030'; ctx.font='bold 12px Segoe UI'; ctx.fillText('START',cx,cy);
-    } else {
-      ctx.fillStyle=num%10===0?'#c05010':num%5===0?'#1a60a0':'#7a6040';
-      ctx.font=num%10===0?'bold 12px Segoe UI':'11px Segoe UI';
-      ctx.fillText(num,cx,cy);
-    }
+  function drawSquare({num,x,y}){
+    const isGoal=num===100,isStart=num===1;
+    const w=isGoal?GOAL_W:SQ_W,h=isGoal?GOAL_H:SQ_H;
+    const sx=x+(SQ_W-w)/2,sy=y+(SQ_H-h)/2;
+    ctx.save();ctx.shadowColor='rgba(0,0,0,0.18)';ctx.shadowBlur=6;ctx.shadowOffsetY=2;
+    ctx.fillStyle=squareGrad(num,sx,sy,w,h);rr(sx,sy,w,h,6);ctx.fill();ctx.restore();
+    ctx.strokeStyle=squareBorder(num);ctx.lineWidth=isGoal||isStart?2.5:1.5;
+    rr(sx,sy,w,h,6);ctx.stroke();
+    ctx.save();ctx.globalAlpha=0.4;ctx.fillStyle='rgba(255,255,255,0.8)';
+    ctx.beginPath();ctx.roundRect(sx+2,sy+2,w-4,h*.35,[6,6,0,0]);ctx.fill();ctx.restore();
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    const cx=sx+w/2,cy=sy+h/2;
+    if(isGoal){ctx.fillStyle='#8a6000';ctx.font='bold 14px Segoe UI';ctx.fillText('GOAL',cx,cy-12);ctx.font='22px serif';ctx.fillText('🏆',cx,cy+10);}
+    else if(isStart){ctx.fillStyle='#1a6030';ctx.font='bold 12px Segoe UI';ctx.fillText('START',cx,cy);}
+    else{ctx.fillStyle=num%10===0?'#c05010':num%5===0?'#1a60a0':'#7a6040';ctx.font=num%10===0?'bold 12px Segoe UI':'11px Segoe UI';ctx.fillText(num,cx,cy);}
   }
-
-  function drawTokens() {
+  function drawTokens(){
     const byPos={};
-    players.forEach(p=>{ const pos=playerPositions[p.player_id]||1; (byPos[pos]=byPos[pos]||[]).push(p); });
+    players.forEach(p=>{const pos=getPos(playerData[p.player_id]);(byPos[pos]=byPos[pos]||[]).push(p);});
     Object.entries(byPos).forEach(([posStr,group])=>{
       const idx=parseInt(posStr)-1;
-      if (idx<0||idx>=squares.length) return;
-      const {x,y}=squares[idx], cx=x+SQ_W/2, cy=y+SQ_H/2;
+      if(idx<0||idx>=squares.length)return;
+      const {x,y}=squares[idx],cx=x+SQ_W/2,cy=y+SQ_H/2;
       group.forEach((p,i)=>{
-        const off=tokenOffset(group.length,i), tx=cx+off.x, ty=cy+off.y, R=14;
-        ctx.save();
-        ctx.shadowColor='rgba(0,0,0,0.4)'; ctx.shadowBlur=8; ctx.shadowOffsetY=3;
-        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill();
-        ctx.restore();
+        const off=tokenOffset(group.length,i),tx=cx+off.x,ty=cy+off.y,R=14;
+        ctx.save();ctx.shadowColor='rgba(0,0,0,0.4)';ctx.shadowBlur=8;ctx.shadowOffsetY=3;
+        ctx.beginPath();ctx.arc(tx,ty,R,0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();ctx.restore();
         const tg=ctx.createRadialGradient(tx-R*.3,ty-R*.3,R*.05,tx,ty,R);
-        tg.addColorStop(0,'rgba(255,255,255,0.6)'); tg.addColorStop(1,'rgba(0,0,0,0)');
-        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=tg; ctx.fill();
-        ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2;
-        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.stroke();
-        ctx.fillStyle='#fff'; ctx.font='bold 10px Segoe UI';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
+        tg.addColorStop(0,'rgba(255,255,255,0.6)');tg.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.beginPath();ctx.arc(tx,ty,R,0,Math.PI*2);ctx.fillStyle=tg;ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.85)';ctx.lineWidth=2;
+        ctx.beginPath();ctx.arc(tx,ty,R,0,Math.PI*2);ctx.stroke();
+        ctx.fillStyle='#fff';ctx.font='bold 10px Segoe UI';
+        ctx.textAlign='center';ctx.textBaseline='middle';
         ctx.fillText(p.player_name[0].toUpperCase(),tx,ty);
       });
     });
   }
-  function tokenOffset(total,i) {
-    if (total===1) return {x:0,y:0};
+  function tokenOffset(total,i){
+    if(total===1)return{x:0,y:0};
     const a=(i/total)*Math.PI*2-Math.PI/2;
-    return {x:Math.cos(a)*13,y:Math.sin(a)*13};
+    return{x:Math.cos(a)*13,y:Math.sin(a)*13};
   }
 
 }());

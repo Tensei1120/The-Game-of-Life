@@ -8,13 +8,11 @@
 </head>
 <body>
 
-  <!-- タイトル画面 -->
   <div id="title-screen">
     <h1 id="title-text">GO!GO!LIFE</h1>
     <button id="btn-go">START</button>
   </div>
 
-  <!-- あいことば入力画面 -->
   <div id="word-screen" class="hidden">
     <div class="word-card">
       <p class="word-label">名前とあいことばを入力</p>
@@ -25,7 +23,6 @@
     </div>
   </div>
 
-  <!-- 待機室 -->
   <div id="lobby-screen" class="hidden">
     <div class="lobby-card">
       <h2 id="lobby-room-name"></h2>
@@ -36,7 +33,6 @@
     </div>
   </div>
 
-  <!-- ゲーム画面 -->
   <div id="game-screen" class="hidden">
     <div class="container">
       <div class="game-header">
@@ -53,14 +49,16 @@
         <div id="dice-result"></div>
         <button id="btn-roll">🎲 サイコロを振る</button>
       </div>
-      <ul id="game-player-list"></ul>
+
+      <!-- プレイヤーステータスカード -->
+      <div id="player-status-area"></div>
+
       <div class="stats">
         <span>ターン: <strong id="turn-number">0</strong></span>
       </div>
     </div>
   </div>
 
-  <!-- ルーム解散オーバーレイ -->
   <div id="dissolution-overlay" class="hidden">
     <div class="dissolution-box">
       <p class="dissolution-icon">🚪</p>
