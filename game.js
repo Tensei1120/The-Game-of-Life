@@ -6,6 +6,8 @@
   // ──────────────────────────────────────────
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
+  const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
+
   // ──────────────────────────────────────────
   // ゲーム定数
   // ──────────────────────────────────────────
@@ -20,7 +22,7 @@
   const GRID_COLOR     = '#1a2a3a';
 
   // ──────────────────────────────────────────
-  // セッションID（宣言的匿名識別）
+  // セッションID
   // ──────────────────────────────────────────
   let myId = sessionStorage.getItem('gol_pid');
   if (!myId) { myId = crypto.randomUUID(); sessionStorage.setItem('gol_pid', myId); }
@@ -30,11 +32,11 @@
   // ──────────────────────────────────────────
   let myName  = '';
   let roomId  = '';
-  let players = [];   // {player_id, player_name, color, is_host}の配列（joined_at順）
+  let players = [];
   let isHost  = false;
 
-  let aliveCells          = new Set();  // コミット済み alive セル "r,c"
-  let currentTurnCells    = new Set();  // 今ターンで自分が置いたセル
+  let aliveCells          = new Set();
+  let currentTurnCells    = new Set();
   let cellsPlacedThisTurn = 0;
   let currentPlayerIndex  = 0;
   let turnNumber          = 0;
@@ -63,11 +65,8 @@
   function showScreen(id) {
     SCREENS.forEach(sid => {
       const el = $(sid);
-      if (sid === id) {
-        fadeIn(el);
-      } else if (!el.classList.contains('hidden')) {
-        fadeOut(el);
-      }
+      if (sid === id) fadeIn(el);
+      else if (!el.classList.contains('hidden')) fadeOut(el);
     });
   }
 
@@ -88,6 +87,14 @@
   wordInput.addEventListener('keydown', e => e.key === 'Enter' && enterRoom());
 
   async function enterRoom() {
+    // Supabase未設定の場合は明確なエラーを表示
+    if (!isConfigured) {
+      wordError.innerHTML =
+        'Supabaseが未設定です。<br>' +
+        'config.jsの SUPABASE_URL と SUPABASE_ANON を書き換えてください。';
+      return;
+    }
+
     const name = nameInput.value.trim();
     const word = wordInput.value.trim();
     if (!name) { wordError.textContent = '名前を入力してください'; nameInput.focus(); return; }
@@ -95,19 +102,20 @@
     wordError.textContent = '';
 
     const btn = $('btn-create');
-    btn.disabled = true;
+    btn.disabled    = true;
     btn.textContent = '接続中...';
 
     myName = name;
     roomId = word.toLowerCase().replace(/\s+/g, '-');
 
     try {
-      // ルームの確認または作成
-      const { data: existing } = await sb
+      const { data: existing, error: fetchErr } = await sb
         .from('rooms')
         .select('id, host_id')
         .eq('id', roomId)
         .maybeSingle();
+
+      if (fetchErr) throw fetchErr;
 
       if (!existing) {
         const { error } = await sb.from('rooms').insert({
@@ -119,7 +127,6 @@
         isHost = existing.host_id === myId;
       }
 
-      // 未使用のプレイヤーカラーを取得
       const { data: existingPlayers } = await sb
         .from('room_players')
         .select('color')
@@ -127,7 +134,6 @@
       const usedColors = (existingPlayers || []).map(p => p.color);
       const myColor    = PLAYER_COLORS.find(c => !usedColors.includes(c)) || PLAYER_COLORS[0];
 
-      // プレイヤー登録（重複参加はアップデート）
       const { error: pe } = await sb.from('room_players').upsert(
         { room_id: roomId, player_id: myId, player_name: myName, color: myColor, is_host: isHost },
         { onConflict: 'room_id,player_id' }
@@ -140,9 +146,16 @@
 
     } catch (err) {
       console.error(err);
-      wordError.textContent = '接続に失敗しました。もう一度お試しください。';
+      const msg = err?.message || '';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        wordError.textContent = 'ネットワークエラーです。SUPABASE_URLが正しいか確認してください。';
+      } else if (msg.includes('Invalid API key') || msg.includes('apikey')) {
+        wordError.textContent = 'APIキーが正しくありません。SUPABASE_ANONを確認してください。';
+      } else {
+        wordError.textContent = '接続エラー: ' + (msg || '不明なエラー。コンソールを確認してください。');
+      }
     } finally {
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = 'ルームに入る';
     }
   }
@@ -162,18 +175,14 @@
 
   function renderLobby() {
     $('lobby-room-name').textContent = 'ルーム: ' + roomId;
-
     $('player-list').innerHTML = players.map(p => `
       <li class="player-item">
         <span class="player-dot" style="background:${p.color}"></span>
         <span class="player-name">${p.player_name}${p.is_host ? ' 👑' : ''}</span>
       </li>
     `).join('');
-
-    const startBtn = $('btn-lobby-start');
-    const hint     = $('lobby-hint');
-    startBtn.style.display = isHost ? 'block' : 'none';
-    hint.style.display     = isHost ? 'none'  : 'block';
+    $('btn-lobby-start').style.display = isHost ? 'block' : 'none';
+    $('lobby-hint').style.display      = isHost ? 'none'  : 'block';
   }
 
   $('btn-lobby-start').addEventListener('click', async () => {
@@ -181,7 +190,7 @@
   });
 
   // ──────────────────────────────────────────
-  // Supabase Realtime購読
+  // Supabase Realtime
   // ──────────────────────────────────────────
   function subscribeRoom() {
     channel = sb.channel('room-' + roomId)
@@ -196,7 +205,6 @@
 
   async function onRoomChange(room) {
     if (!room) return;
-
     if (room.status === 'playing') {
       const { data } = await sb
         .from('room_players')
@@ -205,8 +213,7 @@
         .order('joined_at');
       players = data || [];
 
-      const gameEl = $('game-screen');
-      if (gameEl.classList.contains('hidden')) {
+      if ($('game-screen').classList.contains('hidden')) {
         $('room-badge').textContent = 'ルーム: ' + roomId;
         applyRoomState(room);
         showScreen('game-screen');
@@ -235,7 +242,7 @@
   }
 
   // ──────────────────────────────────────────
-  // ターンUI更新
+  // ターンUI
   // ──────────────────────────────────────────
   function updateTurnUI() {
     if (!players.length) return;
@@ -258,8 +265,7 @@
 
     const doneBtn = $('btn-done');
     doneBtn.style.display = isMyTurn ? 'block' : 'none';
-    doneBtn.disabled = false;
-
+    doneBtn.disabled      = false;
     $('turn-number').textContent = turnNumber;
 
     $('game-player-list').innerHTML = players.map((p, i) => `
@@ -283,7 +289,6 @@
     let newAlive = [...aliveCells].map(k => k.split(',').map(Number));
 
     if (isLastPlayer) {
-      // 全プレイヤーが終わったらシミュレーションを実行
       simulating = true;
       $('sim-overlay').classList.remove('hidden');
       await sleep(400);
@@ -301,7 +306,7 @@
   });
 
   // ──────────────────────────────────────────
-  // Conway's Game of Life シミュレーション
+  // シミュレーション
   // ──────────────────────────────────────────
   function runSimulation(pairs, gens) {
     let cells = new Set(pairs.map(([r,c]) => `${r},${c}`));
@@ -345,7 +350,6 @@
       ctx.beginPath(); ctx.moveTo(c*CELL, 0); ctx.lineTo(c*CELL, canvas.height); ctx.stroke();
     }
 
-    // コミット済みセル（今ターン分を除く）
     ctx.fillStyle = ALIVE_COLOR;
     for (const key of aliveCells) {
       if (!currentTurnCells.has(key)) {
@@ -354,8 +358,7 @@
       }
     }
 
-    // 今ターンのセル（現在のプレイヤーカラー）
-    const idx     = currentPlayerIndex % players.length;
+    const idx     = currentPlayerIndex % Math.max(players.length, 1);
     const myColor = players[idx]?.color || ALIVE_COLOR;
     ctx.fillStyle = myColor;
     for (const key of currentTurnCells) {
@@ -367,7 +370,7 @@
   }
 
   // ──────────────────────────────────────────
-  // セル配置（マウス & タッチ）
+  // セル配置
   // ──────────────────────────────────────────
   function cellFromEvent(e) {
     const rect = canvas.getBoundingClientRect();
