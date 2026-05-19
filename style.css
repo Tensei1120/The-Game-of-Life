@@ -13,9 +13,6 @@ body {
 
 .hidden { display: none !important; }
 
-/* ==============================
-   画面共通
-============================== */
 #title-screen,
 #word-screen,
 #lobby-screen,
@@ -23,341 +20,140 @@ body {
   transition: opacity 0.5s ease;
   opacity: 0;
 }
-
-#title-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  gap: 60px;
-  opacity: 1;
-}
-
-#word-screen,
-#lobby-screen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 24px;
-}
-
-#game-screen {
-  display: flex;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 20px;
-}
-
-.visible { opacity: 1 !important; }
+#title-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; gap:60px; opacity:1; }
+#word-screen, #lobby-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:24px; }
+#game-screen { display:flex; justify-content:center; min-height:100vh; padding:16px; }
+.visible  { opacity: 1 !important; }
 .fade-out { opacity: 0 !important; pointer-events: none; }
 
-/* ==============================
-   タイトル画面
-============================== */
+/* ── タイトル ── */
 #title-text {
   font-size: clamp(2.4rem, 8vw, 5rem);
   font-weight: 900;
   color: #a0d8ef;
   text-align: center;
-  letter-spacing: 0.06em;
-  text-shadow: 0 0 30px rgba(160,216,239,0.4);
+  letter-spacing: .06em;
+  text-shadow: 0 0 30px rgba(160,216,239,.4);
 }
-
 #btn-go {
   padding: 18px 64px;
   font-size: 1.6rem;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: .2em;
   border: none;
   border-radius: 50px;
   background: #a0d8ef;
   color: #0d1b2a;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
-  box-shadow: 0 0 24px rgba(160,216,239,0.5);
+  transition: transform .15s, box-shadow .15s, background .15s;
+  box-shadow: 0 0 24px rgba(160,216,239,.5);
 }
-#btn-go:hover { background: #c8eaf8; transform: scale(1.06); box-shadow: 0 0 40px rgba(160,216,239,0.7); }
-#btn-go:active { transform: scale(0.98); }
+#btn-go:hover { background:#c8eaf8; transform:scale(1.06); box-shadow:0 0 40px rgba(160,216,239,.7); }
+#btn-go:active { transform:scale(.98); }
 
-/* ==============================
-   あいことば入力画面
-============================== */
+/* ── あいことば ── */
 .word-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  background: #132336;
-  border: 1px solid #2a4a6a;
-  border-radius: 16px;
-  padding: 48px 40px;
-  width: 100%;
-  max-width: 400px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  display:flex; flex-direction:column; align-items:center; gap:16px;
+  background:#132336; border:1px solid #2a4a6a; border-radius:16px;
+  padding:48px 40px; width:100%; max-width:400px;
+  box-shadow:0 8px 32px rgba(0,0,0,.4);
 }
-
-.word-label {
-  font-size: 1.05rem;
-  color: #a0c8e0;
-  text-align: center;
+.word-label { font-size:1.05rem; color:#a0c8e0; text-align:center; }
+#name-input, #word-input {
+  width:100%; padding:13px 16px; font-size:1.1rem; text-align:center;
+  letter-spacing:.1em; border:2px solid #2a4a6a; border-radius:10px;
+  background:#0d1b2a; color:#a0d8ef; outline:none; transition:border-color .2s;
 }
-
-#name-input,
-#word-input {
-  width: 100%;
-  padding: 13px 16px;
-  font-size: 1.1rem;
-  text-align: center;
-  letter-spacing: 0.1em;
-  border: 2px solid #2a4a6a;
-  border-radius: 10px;
-  background: #0d1b2a;
-  color: #a0d8ef;
-  outline: none;
-  transition: border-color 0.2s;
-}
-#name-input:focus,
-#word-input:focus { border-color: #a0d8ef; }
-#name-input::placeholder,
-#word-input::placeholder { color: #2a4a6a; }
-
-.word-error {
-  font-size: 0.85rem;
-  color: #e07070;
-  min-height: 1.2em;
-  text-align: center;
-}
-
+#name-input:focus, #word-input:focus { border-color:#a0d8ef; }
+#name-input::placeholder, #word-input::placeholder { color:#2a4a6a; }
+.word-error { font-size:.85rem; color:#e07070; min-height:1.2em; text-align:center; }
 #btn-create {
-  width: 100%;
-  padding: 14px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  border: none;
-  border-radius: 10px;
-  background: #a0d8ef;
-  color: #0d1b2a;
-  cursor: pointer;
-  transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
-  box-shadow: 0 0 16px rgba(160,216,239,0.3);
+  width:100%; padding:14px; font-size:1.05rem; font-weight:700;
+  letter-spacing:.1em; border:none; border-radius:10px;
+  background:#a0d8ef; color:#0d1b2a; cursor:pointer;
+  transition:transform .15s, background .15s, box-shadow .15s;
+  box-shadow:0 0 16px rgba(160,216,239,.3);
 }
-#btn-create:hover { background: #c8eaf8; box-shadow: 0 0 28px rgba(160,216,239,0.5); }
-#btn-create:active { transform: scale(0.98); }
-#btn-create:disabled { opacity: 0.6; cursor: not-allowed; }
+#btn-create:hover { background:#c8eaf8; box-shadow:0 0 28px rgba(160,216,239,.5); }
+#btn-create:active { transform:scale(.98); }
+#btn-create:disabled { opacity:.6; cursor:not-allowed; }
 
-/* ==============================
-   待機室
-============================== */
+/* ── 待機室 ── */
 .lobby-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  background: #132336;
-  border: 1px solid #2a4a6a;
-  border-radius: 16px;
-  padding: 48px 40px;
-  width: 100%;
-  max-width: 400px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  display:flex; flex-direction:column; align-items:center; gap:20px;
+  background:#132336; border:1px solid #2a4a6a; border-radius:16px;
+  padding:48px 40px; width:100%; max-width:400px;
+  box-shadow:0 8px 32px rgba(0,0,0,.4);
 }
-
-.lobby-card h2 {
-  font-size: 1.3rem;
-  color: #a0d8ef;
-  text-align: center;
-}
-
-.lobby-subtitle {
-  font-size: 0.85rem;
-  color: #607080;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-#player-list {
-  list-style: none;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 60px;
-}
-
-.player-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: #0d1b2a;
-  border-radius: 8px;
-  font-size: 1rem;
-}
-
-.player-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.player-name { color: #d0e8f8; }
-
+.lobby-card h2 { font-size:1.3rem; color:#a0d8ef; text-align:center; }
+.lobby-subtitle { font-size:.85rem; color:#607080; text-transform:uppercase; letter-spacing:.1em; }
+#player-list { list-style:none; width:100%; display:flex; flex-direction:column; gap:10px; min-height:60px; }
+.player-item { display:flex; align-items:center; gap:10px; padding:10px 14px; background:#0d1b2a; border-radius:8px; }
+.player-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+.player-name { color:#d0e8f8; }
 #btn-lobby-start {
-  width: 100%;
-  padding: 14px;
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  border: none;
-  border-radius: 10px;
-  background: #2a8a4a;
-  color: #e0f8e8;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
+  width:100%; padding:14px; font-size:1.05rem; font-weight:700; letter-spacing:.08em;
+  border:none; border-radius:10px; background:#2a8a4a; color:#e0f8e8;
+  cursor:pointer; transition:background .2s, transform .1s;
 }
-#btn-lobby-start:hover { background: #3aaa5a; }
-#btn-lobby-start:active { transform: scale(0.98); }
+#btn-lobby-start:hover { background:#3aaa5a; }
+#btn-lobby-start:active { transform:scale(.98); }
+.hint { font-size:.8rem; color:#506070; text-align:center; }
 
-.hint {
-  font-size: 0.8rem;
-  color: #506070;
-  text-align: center;
-}
-
-/* ==============================
-   ゲーム画面
-============================== */
+/* ── ゲーム画面 ── */
 .container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  max-width: 900px;
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+  width:100%; max-width:920px;
 }
-
-.game-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.game-header h2 {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: #a0d8ef;
-  letter-spacing: 0.05em;
-}
-
+.game-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:center; }
+.game-header h2 { font-size:1.4rem; font-weight:700; color:#a0d8ef; letter-spacing:.05em; }
 #room-badge {
-  padding: 4px 14px;
-  border-radius: 20px;
-  background: #1a3a5a;
-  border: 1px solid #2a5a8a;
-  font-size: 0.85rem;
-  color: #80c0e0;
+  padding:4px 14px; border-radius:20px; background:#1a3a5a;
+  border:1px solid #2a5a8a; font-size:.85rem; color:#80c0e0;
+}
+.turn-info { text-align:center; }
+#turn-indicator { font-size:1.15rem; font-weight:700; }
+
+.canvas-wrapper { width:100%; overflow-x:auto; }
+#board-canvas {
+  display:block;
+  max-width:100%;
+  border-radius:8px;
 }
 
-.turn-info {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+/* ── サイコロ ── */
+#dice-area {
+  display:flex; flex-direction:column; align-items:center; gap:10px;
 }
-
-#turn-indicator {
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+#dice-result {
+  font-size:2rem;
+  min-height:2.4rem;
+  letter-spacing:.05em;
+  color:#ffd700;
+  text-align:center;
 }
-
-#cells-remaining {
-  font-size: 0.85rem;
-  color: #809090;
-  min-height: 1.2em;
+#btn-roll {
+  padding:12px 40px; font-size:1.1rem; font-weight:700; letter-spacing:.08em;
+  border:none; border-radius:50px;
+  background:#a0d8ef; color:#0d1b2a;
+  cursor:pointer; transition:transform .15s, box-shadow .15s;
+  box-shadow:0 0 16px rgba(160,216,239,.4);
 }
+#btn-roll:hover { background:#c8eaf8; transform:scale(1.05); }
+#btn-roll:active { transform:scale(.97); }
+#btn-roll:disabled { opacity:.5; cursor:not-allowed; transform:none; }
 
-.canvas-wrapper {
-  position: relative;
-}
-
-#canvas {
-  display: block;
-  border: 2px solid #2a4a6a;
-  border-radius: 4px;
-  cursor: crosshair;
-  image-rendering: pixelated;
-  max-width: 100%;
-}
-
-#sim-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(13,27,42,0.8);
-  color: #a0d8ef;
-  font-size: 1.4rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  border-radius: 4px;
-}
-
-#btn-done {
-  padding: 12px 40px;
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  border: none;
-  border-radius: 8px;
-  background: #2a8a4a;
-  color: #e0f8e8;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-}
-#btn-done:hover { background: #3aaa5a; }
-#btn-done:active { transform: scale(0.97); }
-#btn-done:disabled { opacity: 0.5; cursor: not-allowed; }
-
+/* ── プレイヤーリスト ── */
 #game-player-list {
-  list-style: none;
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
+  list-style:none; display:flex; gap:10px; flex-wrap:wrap; justify-content:center;
 }
-
 .gpl-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  background: #132336;
-  border: 1px solid #2a4a6a;
-  font-size: 0.85rem;
-  color: #90a8b8;
-  transition: background 0.2s, border-color 0.2s;
+  display:flex; align-items:center; gap:6px; padding:6px 12px;
+  border-radius:20px; background:#132336; border:1px solid #2a4a6a;
+  font-size:.85rem; color:#90a8b8;
 }
-
 .gpl-item.gpl-active {
-  background: #1a3a5a;
-  border-color: #a0d8ef;
-  color: #e0f0ff;
-  font-weight: 700;
+  background:#1a3a5a; border-color:#a0d8ef; color:#e0f0ff; font-weight:700;
 }
-
-.stats {
-  display: flex;
-  gap: 28px;
-  font-size: 0.95rem;
-  color: #b0b0c0;
-}
-.stats strong { color: #a0d8ef; }
+.stats { font-size:.95rem; color:#b0b0c0; }
+.stats strong { color:#a0d8ef; }

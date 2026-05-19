@@ -1,67 +1,71 @@
 (function () {
   'use strict';
 
-  // ──────────────────────────────────────────
-  // Supabase
-  // ──────────────────────────────────────────
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
-  // ──────────────────────────────────────────
-  // ゲーム定数
-  // ──────────────────────────────────────────
-  const COLS           = 60;
-  const ROWS           = 44;
-  const CELL           = 14;
-  const CELLS_PER_TURN = 5;
-  const SIM_GENS       = 10;
-  const PLAYER_COLORS  = ['#a0d8ef','#f08080','#90ee90','#ffd700','#da70d6','#ff8c00'];
-  const ALIVE_COLOR    = '#a0d8ef';
-  const DEAD_COLOR     = '#0d1b2a';
-  const GRID_COLOR     = '#1a2a3a';
+  // ── ボード定数 ──
+  const COLS    = 10;
+  const ROWS    = 10;
+  const SQ_W    = 76;   // 通常マス 幅
+  const SQ_H    = 54;   // 通常マス 高さ
+  const GAP_X   = 6;    // 横間隔
+  const GAP_Y   = 18;   // 縦間隔
+  const MX      = 22;   // 左右マージン
+  const MY      = 22;   // 上下マージン
+  const GOAL_W  = 96;   // GOALマス 幅
+  const GOAL_H  = 70;   // GOALマス 高さ
 
-  // ──────────────────────────────────────────
-  // セッションID
-  // ──────────────────────────────────────────
+  const CW = MX * 2 + COLS * (SQ_W + GAP_X) - GAP_X;  // canvas幅
+  const CH = MY * 2 + ROWS * (SQ_H + GAP_Y) - GAP_Y;  // canvas高さ
+
+  const PLAYER_COLORS = ['#a0d8ef','#f08080','#90ee90','#ffd700','#da70d6','#ff8c00'];
+
+  // ── セッションID ──
   let myId = sessionStorage.getItem('gol_pid');
   if (!myId) { myId = crypto.randomUUID(); sessionStorage.setItem('gol_pid', myId); }
 
-  // ──────────────────────────────────────────
-  // 状態
-  // ──────────────────────────────────────────
+  // ── 状態 ──
   let myName  = '';
   let roomId  = '';
   let players = [];
   let isHost  = false;
+  let playerPositions   = {};  // { playerId: マス番号(1-100) }
+  let currentPlayerIndex = 0;
+  let turnNumber         = 0;
+  let isMyTurn           = false;
+  let rolling            = false;
+  let channel            = null;
 
-  let aliveCells          = new Set();
-  let currentTurnCells    = new Set();
-  let cellsPlacedThisTurn = 0;
-  let currentPlayerIndex  = 0;
-  let turnNumber          = 0;
-  let isMyTurn            = false;
-  let simulating          = false;
+  // ── マス座標の生成 ──
+  const squares = buildSquares();
 
-  let channel = null;
+  function buildSquares() {
+    const sqs = [];
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const num     = row * COLS + col + 1;
+        const gridCol = row % 2 === 0 ? col : (COLS - 1 - col);
+        const x       = MX + gridCol * (SQ_W + GAP_X);
+        const y       = CH - MY - SQ_H - row * (SQ_H + GAP_Y);
+        sqs.push({ num, x, y });
+      }
+    }
+    return sqs;
+  }
 
-  // ──────────────────────────────────────────
-  // DOMヘルパー
-  // ──────────────────────────────────────────
+  // ── DOM ──
   const $ = id => document.getElementById(id);
 
   function fadeOut(el, cb) {
     el.classList.add('fade-out');
     setTimeout(() => { el.classList.add('hidden'); cb && cb(); }, 500);
   }
-
   function fadeIn(el) {
     el.classList.remove('hidden');
     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('visible')));
   }
-
   const SCREENS = ['title-screen','word-screen','lobby-screen','game-screen'];
-
   function showScreen(id) {
     SCREENS.forEach(sid => {
       const el = $(sid);
@@ -70,14 +74,10 @@
     });
   }
 
-  // ──────────────────────────────────────────
-  // タイトル → あいことば入力
-  // ──────────────────────────────────────────
+  // ── タイトル ──
   $('btn-go').addEventListener('click', () => showScreen('word-screen'));
 
-  // ──────────────────────────────────────────
-  // あいことば入力 → 待機室
-  // ──────────────────────────────────────────
+  // ── あいことば入力 ──
   const nameInput = $('name-input');
   const wordInput = $('word-input');
   const wordError = $('word-error');
@@ -87,14 +87,10 @@
   wordInput.addEventListener('keydown', e => e.key === 'Enter' && enterRoom());
 
   async function enterRoom() {
-    // Supabase未設定の場合は明確なエラーを表示
     if (!isConfigured) {
-      wordError.innerHTML =
-        'Supabaseが未設定です。<br>' +
-        'config.jsの SUPABASE_URL と SUPABASE_ANON を書き換えてください。';
+      wordError.innerHTML = 'Supabaseが未設定です。<br>config.js を書き換えてください。';
       return;
     }
-
     const name = nameInput.value.trim();
     const word = wordInput.value.trim();
     if (!name) { wordError.textContent = '名前を入力してください'; nameInput.focus(); return; }
@@ -102,36 +98,26 @@
     wordError.textContent = '';
 
     const btn = $('btn-create');
-    btn.disabled    = true;
-    btn.textContent = '接続中...';
-
+    btn.disabled = true; btn.textContent = '接続中...';
     myName = name;
     roomId = word.toLowerCase().replace(/\s+/g, '-');
 
     try {
-      const { data: existing, error: fetchErr } = await sb
-        .from('rooms')
-        .select('id, host_id')
-        .eq('id', roomId)
-        .maybeSingle();
-
-      if (fetchErr) throw fetchErr;
+      const { data: existing, error: fe } = await sb
+        .from('rooms').select('id,host_id').eq('id', roomId).maybeSingle();
+      if (fe) throw fe;
 
       if (!existing) {
-        const { error } = await sb.from('rooms').insert({
-          id: roomId, host_id: myId, alive_cells: []
-        });
+        const { error } = await sb.from('rooms')
+          .insert({ id: roomId, host_id: myId, alive_cells: {} });
         if (error) throw error;
         isHost = true;
       } else {
         isHost = existing.host_id === myId;
       }
 
-      const { data: existingPlayers } = await sb
-        .from('room_players')
-        .select('color')
-        .eq('room_id', roomId);
-      const usedColors = (existingPlayers || []).map(p => p.color);
+      const { data: ep } = await sb.from('room_players').select('color').eq('room_id', roomId);
+      const usedColors = (ep || []).map(p => p.color);
       const myColor    = PLAYER_COLORS.find(c => !usedColors.includes(c)) || PLAYER_COLORS[0];
 
       const { error: pe } = await sb.from('room_players').upsert(
@@ -143,32 +129,24 @@
       await refreshPlayers();
       subscribeRoom();
       showScreen('lobby-screen');
-
     } catch (err) {
       console.error(err);
       const msg = err?.message || '';
-      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        wordError.textContent = 'ネットワークエラーです。SUPABASE_URLが正しいか確認してください。';
-      } else if (msg.includes('Invalid API key') || msg.includes('apikey')) {
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError'))
+        wordError.textContent = 'ネットワークエラー。SUPABASE_URLを確認してください。';
+      else if (msg.includes('Invalid API key') || msg.includes('apikey'))
         wordError.textContent = 'APIキーが正しくありません。SUPABASE_ANONを確認してください。';
-      } else {
-        wordError.textContent = '接続エラー: ' + (msg || '不明なエラー。コンソールを確認してください。');
-      }
+      else
+        wordError.textContent = '接続エラー: ' + (msg || 'コンソールを確認してください。');
     } finally {
-      btn.disabled    = false;
-      btn.textContent = 'ルームに入る';
+      btn.disabled = false; btn.textContent = 'ルームに入る';
     }
   }
 
-  // ──────────────────────────────────────────
-  // 待機室
-  // ──────────────────────────────────────────
+  // ── 待機室 ──
   async function refreshPlayers() {
-    const { data } = await sb
-      .from('room_players')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('joined_at');
+    const { data } = await sb.from('room_players').select('*')
+      .eq('room_id', roomId).order('joined_at');
     players = data || [];
     renderLobby();
   }
@@ -179,24 +157,23 @@
       <li class="player-item">
         <span class="player-dot" style="background:${p.color}"></span>
         <span class="player-name">${p.player_name}${p.is_host ? ' 👑' : ''}</span>
-      </li>
-    `).join('');
+      </li>`).join('');
     $('btn-lobby-start').style.display = isHost ? 'block' : 'none';
     $('lobby-hint').style.display      = isHost ? 'none'  : 'block';
   }
 
   $('btn-lobby-start').addEventListener('click', async () => {
-    await sb.from('rooms').update({ status: 'playing' }).eq('id', roomId);
+    const initPos = {};
+    players.forEach(p => { initPos[p.player_id] = 1; });
+    await sb.from('rooms').update({ status: 'playing', alive_cells: initPos }).eq('id', roomId);
   });
 
-  // ──────────────────────────────────────────
-  // Supabase Realtime
-  // ──────────────────────────────────────────
+  // ── Realtime ──
   function subscribeRoom() {
     channel = sb.channel('room-' + roomId)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}`
-      }, payload => onRoomChange(payload.new))
+      }, p => onRoomChange(p.new))
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'room_players', filter: `room_id=eq.${roomId}`
       }, () => refreshPlayers())
@@ -206,13 +183,9 @@
   async function onRoomChange(room) {
     if (!room) return;
     if (room.status === 'playing') {
-      const { data } = await sb
-        .from('room_players')
-        .select('*')
-        .eq('room_id', roomId)
-        .order('joined_at');
+      const { data } = await sb.from('room_players').select('*')
+        .eq('room_id', roomId).order('joined_at');
       players = data || [];
-
       if ($('game-screen').classList.contains('hidden')) {
         $('room-badge').textContent = 'ルーム: ' + roomId;
         applyRoomState(room);
@@ -223,32 +196,26 @@
     }
   }
 
-  // ──────────────────────────────────────────
-  // Canvas
-  // ──────────────────────────────────────────
-  const canvas = $('canvas');
+  // ── Canvas ──
+  const canvas = $('board-canvas');
   const ctx    = canvas.getContext('2d');
-  canvas.width  = COLS * CELL;
-  canvas.height = ROWS * CELL;
+  canvas.width  = CW;
+  canvas.height = CH;
 
   function applyRoomState(room) {
-    aliveCells          = new Set((room.alive_cells || []).map(([r,c]) => `${r},${c}`));
-    currentPlayerIndex  = room.current_player_index || 0;
-    turnNumber          = room.turn_number || 0;
-    currentTurnCells    = new Set();
-    cellsPlacedThisTurn = 0;
+    playerPositions    = room.alive_cells || {};
+    currentPlayerIndex = room.current_player_index || 0;
+    turnNumber         = room.turn_number || 0;
     updateTurnUI();
-    drawCanvas();
+    drawBoard();
   }
 
-  // ──────────────────────────────────────────
-  // ターンUI
-  // ──────────────────────────────────────────
+  // ── ターンUI ──
   function updateTurnUI() {
     if (!players.length) return;
     const idx = currentPlayerIndex % players.length;
     const cp  = players[idx];
-    isMyTurn  = cp && cp.player_id === myId;
+    isMyTurn  = cp?.player_id === myId;
 
     const ind = $('turn-indicator');
     if (isMyTurn) {
@@ -259,170 +226,204 @@
       ind.style.color = cp?.color || '#a0d8ef';
     }
 
-    $('cells-remaining').textContent = isMyTurn
-      ? `残り ${CELLS_PER_TURN - cellsPlacedThisTurn} セル配置できます`
-      : '';
-
-    const doneBtn = $('btn-done');
-    doneBtn.style.display = isMyTurn ? 'block' : 'none';
-    doneBtn.disabled      = false;
+    const rollBtn = $('btn-roll');
+    rollBtn.style.display = isMyTurn ? 'block' : 'none';
+    rollBtn.disabled = false;
+    rolling = false;
     $('turn-number').textContent = turnNumber;
 
-    $('game-player-list').innerHTML = players.map((p, i) => `
-      <li class="gpl-item ${i === idx ? 'gpl-active' : ''}">
+    $('game-player-list').innerHTML = players.map((p, i) => {
+      const pos = playerPositions[p.player_id] || 1;
+      return `<li class="gpl-item ${i === idx ? 'gpl-active' : ''}">
         <span class="player-dot" style="background:${p.color}"></span>
         <span>${p.player_name}</span>
-      </li>
-    `).join('');
+        <span style="color:${p.color};margin-left:4px">${pos}マス</span>
+      </li>`;
+    }).join('');
   }
 
-  // ──────────────────────────────────────────
-  // ターン終了ボタン
-  // ──────────────────────────────────────────
-  $('btn-done').addEventListener('click', async () => {
-    if (!isMyTurn || simulating) return;
-    $('btn-done').disabled = true;
+  // ── サイコロ ──
+  $('btn-roll').addEventListener('click', async () => {
+    if (!isMyTurn || rolling) return;
+    rolling = true;
+    $('btn-roll').disabled = true;
 
-    const nextIndex    = (currentPlayerIndex + 1) % players.length;
-    const isLastPlayer = nextIndex === 0;
+    const roll = Math.floor(Math.random() * 6) + 1;
+    await animateDice(roll);
 
-    let newAlive = [...aliveCells].map(k => k.split(',').map(Number));
+    const curPos = playerPositions[myId] || 1;
+    const newPos = Math.min(curPos + roll, 100);
+    const newPositions = { ...playerPositions, [myId]: newPos };
 
-    if (isLastPlayer) {
-      simulating = true;
-      $('sim-overlay').classList.remove('hidden');
-      await sleep(400);
-      newAlive = runSimulation(newAlive, SIM_GENS);
-      await sleep(300);
-      $('sim-overlay').classList.add('hidden');
-      simulating = false;
-    }
-
+    const nextIndex = (currentPlayerIndex + 1) % players.length;
     await sb.from('rooms').update({
-      alive_cells:           newAlive,
+      alive_cells:           newPositions,
       current_player_index:  nextIndex,
-      turn_number:           isLastPlayer ? turnNumber + 1 : turnNumber,
+      turn_number:           nextIndex === 0 ? turnNumber + 1 : turnNumber,
     }).eq('id', roomId);
   });
 
-  // ──────────────────────────────────────────
-  // シミュレーション
-  // ──────────────────────────────────────────
-  function runSimulation(pairs, gens) {
-    let cells = new Set(pairs.map(([r,c]) => `${r},${c}`));
-    for (let g = 0; g < gens; g++) cells = stepCells(cells);
-    return [...cells].map(k => k.split(',').map(Number));
-  }
-
-  function stepCells(cells) {
-    const counts = new Map();
-    for (const key of cells) {
-      const [r, c] = key.split(',').map(Number);
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (!dr && !dc) continue;
-          const nk = `${(r+dr+ROWS)%ROWS},${(c+dc+COLS)%COLS}`;
-          counts.set(nk, (counts.get(nk) || 0) + 1);
-        }
-      }
+  const DICE_FACE = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+  async function animateDice(result) {
+    const el = $('dice-result');
+    for (let i = 0; i < 10; i++) {
+      el.textContent = DICE_FACE[Math.floor(Math.random() * 6)];
+      await sleep(60);
     }
-    const next = new Set();
-    for (const [k, n] of counts)
-      if (n === 3 || (n === 2 && cells.has(k))) next.add(k);
-    return next;
+    el.textContent = DICE_FACE[result - 1] + '  ' + result + 'マス進む！';
   }
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  // ──────────────────────────────────────────
-  // Canvas描画
-  // ──────────────────────────────────────────
-  function drawCanvas() {
-    ctx.fillStyle = DEAD_COLOR;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // ── ボード描画 ──
+  function drawBoard() {
+    // 背景
+    ctx.fillStyle = '#091520';
+    ctx.fillRect(0, 0, CW, CH);
 
-    ctx.strokeStyle = GRID_COLOR;
-    ctx.lineWidth   = 0.5;
-    for (let r = 0; r <= ROWS; r++) {
-      ctx.beginPath(); ctx.moveTo(0, r*CELL); ctx.lineTo(canvas.width, r*CELL); ctx.stroke();
-    }
-    for (let c = 0; c <= COLS; c++) {
-      ctx.beginPath(); ctx.moveTo(c*CELL, 0); ctx.lineTo(c*CELL, canvas.height); ctx.stroke();
-    }
-
-    ctx.fillStyle = ALIVE_COLOR;
-    for (const key of aliveCells) {
-      if (!currentTurnCells.has(key)) {
-        const [r, c] = key.split(',').map(Number);
-        ctx.fillRect(c*CELL+1, r*CELL+1, CELL-1, CELL-1);
-      }
-    }
-
-    const idx     = currentPlayerIndex % Math.max(players.length, 1);
-    const myColor = players[idx]?.color || ALIVE_COLOR;
-    ctx.fillStyle = myColor;
-    for (const key of currentTurnCells) {
-      const [r, c] = key.split(',').map(Number);
-      ctx.fillRect(c*CELL+1, r*CELL+1, CELL-1, CELL-1);
-    }
-
-    $('population').textContent = aliveCells.size;
+    drawRoad();
+    squares.forEach(drawSquare);
+    drawTokens();
   }
 
-  // ──────────────────────────────────────────
-  // セル配置
-  // ──────────────────────────────────────────
-  function cellFromEvent(e) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      r: Math.floor((e.clientY - rect.top)  * ROWS / rect.height),
-      c: Math.floor((e.clientX - rect.left) * COLS / rect.width),
-    };
+  // 道（マスを繋ぐ太い帯）
+  function drawRoad() {
+    ctx.save();
+    ctx.lineWidth  = SQ_H + GAP_Y + 2;
+    ctx.strokeStyle = '#0f2030';
+    ctx.lineJoin   = 'round';
+    ctx.lineCap    = 'round';
+    ctx.beginPath();
+    squares.forEach(({ x, y }, i) => {
+      const cx = x + SQ_W / 2, cy = y + SQ_H / 2;
+      i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
+    });
+    ctx.stroke();
+    ctx.restore();
   }
 
-  let drawing   = false;
-  let drawValue = true;
-
-  function onPointerDown(pos) {
-    if (!isMyTurn || simulating) return;
-    drawing   = true;
-    drawValue = !aliveCells.has(`${pos.r},${pos.c}`);
-    applyCell(pos);
+  function squareColor(num) {
+    if (num === 1)   return '#145a28'; // START 緑
+    if (num === 100) return '#6a5000'; // GOAL  金
+    if (num % 10 === 0) return '#4a3010';
+    if (num % 5  === 0) return '#1a3a5a';
+    return '#162e44';
+  }
+  function squareBorder(num) {
+    if (num === 1)   return '#40e070';
+    if (num === 100) return '#ffd700';
+    if (num % 10 === 0) return '#c08040';
+    if (num % 5  === 0) return '#4080c0';
+    return '#1e4a6a';
   }
 
-  function onPointerMove(pos) {
-    if (!drawing || !isMyTurn || simulating) return;
-    applyCell(pos);
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y,     x + w, y + r,     r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x,     y + h, x,     y + h - r, r);
+    ctx.lineTo(x,     y + r);
+    ctx.arcTo(x,     y,     x + r, y,         r);
+    ctx.closePath();
   }
 
-  function applyCell({ r, c }) {
-    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return;
-    const key = `${r},${c}`;
-    if (drawValue) {
-      if (!aliveCells.has(key) && cellsPlacedThisTurn < CELLS_PER_TURN) {
-        aliveCells.add(key);
-        currentTurnCells.add(key);
-        cellsPlacedThisTurn++;
-        $('cells-remaining').textContent = `残り ${CELLS_PER_TURN - cellsPlacedThisTurn} セル配置できます`;
-        drawCanvas();
-      }
+  function drawSquare({ num, x, y }) {
+    const isGoal  = num === 100;
+    const isStart = num === 1;
+    const w = isGoal ? GOAL_W : SQ_W;
+    const h = isGoal ? GOAL_H : SQ_H;
+    const ox = (SQ_W - w) / 2;
+    const oy = (SQ_H - h) / 2;
+    const sx = x + ox, sy = y + oy;
+
+    // 影
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.5)';
+    ctx.shadowBlur  = 6;
+    ctx.fillStyle   = squareColor(num);
+    rr(sx, sy, w, h, 7);
+    ctx.fill();
+    ctx.restore();
+
+    // 枠線
+    ctx.strokeStyle = squareBorder(num);
+    ctx.lineWidth   = isGoal || isStart ? 2.5 : 1;
+    rr(sx, sy, w, h, 7);
+    ctx.stroke();
+
+    // テキスト
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    const cx = sx + w / 2, cy = sy + h / 2;
+
+    if (isGoal) {
+      ctx.fillStyle = '#ffd700';
+      ctx.font      = 'bold 13px Segoe UI';
+      ctx.fillText('GOAL', cx, cy - 10);
+      ctx.font      = '22px serif';
+      ctx.fillText('🏆', cx, cy + 10);
+    } else if (isStart) {
+      ctx.fillStyle = '#60ff90';
+      ctx.font      = 'bold 12px Segoe UI';
+      ctx.fillText('START', cx, cy);
     } else {
-      if (currentTurnCells.has(key)) {
-        aliveCells.delete(key);
-        currentTurnCells.delete(key);
-        cellsPlacedThisTurn--;
-        $('cells-remaining').textContent = `残り ${CELLS_PER_TURN - cellsPlacedThisTurn} セル配置できます`;
-        drawCanvas();
-      }
+      ctx.fillStyle = num % 5 === 0 ? '#90c8e8' : '#7090a8';
+      ctx.font      = num % 10 === 0 ? 'bold 12px Segoe UI' : '11px Segoe UI';
+      ctx.fillText(num, cx, cy);
     }
   }
 
-  canvas.addEventListener('mousedown', e => onPointerDown(cellFromEvent(e)));
-  canvas.addEventListener('mousemove', e => onPointerMove(cellFromEvent(e)));
-  window.addEventListener('mouseup',   () => { drawing = false; });
+  // ── トークン描画 ──
+  function drawTokens() {
+    const byPos = {};
+    players.forEach(p => {
+      const pos = playerPositions[p.player_id] || 1;
+      (byPos[pos] = byPos[pos] || []).push(p);
+    });
 
-  canvas.addEventListener('touchstart', e => { e.preventDefault(); onPointerDown(cellFromEvent(e.touches[0])); }, { passive: false });
-  canvas.addEventListener('touchmove',  e => { e.preventDefault(); onPointerMove(cellFromEvent(e.touches[0])); }, { passive: false });
-  window.addEventListener('touchend',   () => { drawing = false; });
+    Object.entries(byPos).forEach(([posStr, group]) => {
+      const sqIdx = parseInt(posStr) - 1;
+      if (sqIdx < 0 || sqIdx >= squares.length) return;
+      const { x, y } = squares[sqIdx];
+      const cx = x + SQ_W / 2, cy = y + SQ_H / 2;
+
+      group.forEach((p, i) => {
+        const off = tokenOffset(group.length, i);
+        const tx = cx + off.x, ty = cy + off.y;
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,.6)';
+        ctx.shadowBlur  = 5;
+        ctx.beginPath();
+        ctx.arc(tx, ty, 11, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        ctx.restore();
+
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth   = 1.5;
+        ctx.beginPath();
+        ctx.arc(tx, ty, 11, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle    = '#000';
+        ctx.font         = 'bold 9px Segoe UI';
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(p.player_name[0].toUpperCase(), tx, ty);
+      });
+    });
+  }
+
+  function tokenOffset(total, i) {
+    if (total === 1) return { x: 0, y: 0 };
+    const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
+    const r     = total <= 2 ? 9 : 11;
+    return { x: Math.cos(angle) * r, y: Math.sin(angle) * r };
+  }
 
 }());

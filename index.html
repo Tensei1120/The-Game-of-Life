@@ -46,21 +46,21 @@
 
       <div class="turn-info">
         <div id="turn-indicator">-</div>
-        <div id="cells-remaining"></div>
       </div>
 
       <div class="canvas-wrapper">
-        <canvas id="canvas"></canvas>
-        <div id="sim-overlay" class="hidden">シミュレーション中...</div>
+        <canvas id="board-canvas"></canvas>
       </div>
 
-      <button id="btn-done">ターン終了</button>
+      <div id="dice-area">
+        <div id="dice-result"></div>
+        <button id="btn-roll">🎲 サイコロを振る</button>
+      </div>
 
       <ul id="game-player-list"></ul>
 
       <div class="stats">
         <span>ターン: <strong id="turn-number">0</strong></span>
-        <span>生存セル: <strong id="population">0</strong></span>
       </div>
     </div>
   </div>
