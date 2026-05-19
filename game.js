@@ -127,12 +127,10 @@
         const isStale =
           roomData.status === 'closed' ||
           (roomData.host_id !== myId && roomData.status === 'waiting' && ageMs > 3 * 60 * 1000);
-
         if (isStale) {
-          // DELETE を試み、RLSで失敗したら status='closed' にフォールバック
           const { error: delErr } = await sb.from('rooms').delete().eq('id', roomId);
           if (delErr) {
-            console.warn('DELETE failed, falling back to closed:', delErr.message);
+            console.warn('DELETE failed:', delErr.message);
             await sb.from('rooms').update({ status: 'closed' }).eq('id', roomId);
           }
           roomData = null;
@@ -179,23 +177,15 @@
 
   function dissolveRoom() {
     if (!isHost || !roomId) return;
-    fetch(
-      `${SUPABASE_URL}/rest/v1/rooms?id=eq.${encodeURIComponent(roomId)}`,
-      {
-        method:  'DELETE',
-        headers: {
-          'apikey':        SUPABASE_ANON,
-          'Authorization': `Bearer ${SUPABASE_ANON}`,
-          'Prefer':        'return=minimal',
-        },
-        keepalive: true,
-      }
-    );
+    fetch(`${SUPABASE_URL}/rest/v1/rooms?id=eq.${encodeURIComponent(roomId)}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}`, 'Prefer': 'return=minimal' },
+      keepalive: true,
+    });
   }
 
   async function refreshPlayers() {
-    const { data } = await sb.from('room_players').select('*')
-      .eq('room_id', roomId).order('joined_at');
+    const { data } = await sb.from('room_players').select('*').eq('room_id', roomId).order('joined_at');
     players = data || [];
     renderLobby();
   }
@@ -217,23 +207,16 @@
 
   function subscribeRoom() {
     channel = sb.channel('room-' + roomId)
-      .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}`
-      }, p => onRoomChange(p.new))
-      .on('postgres_changes', {
-        event: 'DELETE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}`
-      }, () => { if (!isHost) showDissolutionOverlay(); })
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'room_players', filter: `room_id=eq.${roomId}`
-      }, () => refreshPlayers())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, p => onRoomChange(p.new))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, () => { if (!isHost) showDissolutionOverlay(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'room_players', filter: `room_id=eq.${roomId}` }, () => refreshPlayers())
       .subscribe();
   }
 
   async function onRoomChange(room) {
     if (!room) return;
     if (room.status === 'playing') {
-      const { data } = await sb.from('room_players').select('*')
-        .eq('room_id', roomId).order('joined_at');
+      const { data } = await sb.from('room_players').select('*').eq('room_id', roomId).order('joined_at');
       players = data || [];
       if ($('game-screen').classList.contains('hidden')) {
         $('room-badge').textContent = 'ルーム: ' + roomId;
@@ -249,8 +232,7 @@
     $('dissolution-overlay').classList.remove('hidden');
     setTimeout(() => {
       $('dissolution-overlay').classList.add('hidden');
-      roomId = ''; players = []; isHost = false;
-      playerPositions = {};
+      roomId = ''; players = []; isHost = false; playerPositions = {};
       nameInput.value = ''; wordInput.value = '';
       showScreen('title-screen');
     }, 3000);
@@ -308,9 +290,8 @@
     const newPositions = { ...playerPositions, [myId]: newPos };
     const nextIndex    = (currentPlayerIndex + 1) % players.length;
     await sb.from('rooms').update({
-      alive_cells:           newPositions,
-      current_player_index:  nextIndex,
-      turn_number:           nextIndex === 0 ? turnNumber + 1 : turnNumber,
+      alive_cells: newPositions, current_player_index: nextIndex,
+      turn_number: nextIndex === 0 ? turnNumber + 1 : turnNumber,
     }).eq('id', roomId);
   });
 
@@ -327,38 +308,113 @@
 
   // ── ボード描画 ──
   function drawBoard() {
-    // ダークシティナイト背景
     ctx.fillStyle = '#040410';
     ctx.fillRect(0, 0, CW, CH);
-
-    // シティグリッド
-    ctx.save();
-    ctx.strokeStyle = 'rgba(0,229,255,0.025)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= CW; x += 80) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
-    }
-    for (let y = 0; y <= CH; y += 80) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
-    }
-    ctx.restore();
-
+    drawGrid();
+    drawBuildings();
     drawRoad();
     squares.forEach(drawSquare);
     drawTokens();
+  }
+
+  function drawGrid() {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,229,255,0.018)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= CW; x += 80) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CH); ctx.stroke(); }
+    for (let y = 0; y <= CH; y += 80) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CW,y); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  // ビルデータ: [x, yTop, width, height]
+  const BLDGS = [
+    // 下中央ギャップ (y 590–8xx)
+    [195,595,46,295],[236,645,32,245],[260,615,28,265],
+    [335,582,52,298],[382,628,36,252],[412,600,30,280],
+    [462,578,54,302],[510,622,38,258],[542,592,44,288],[580,608,30,272],
+    [642,580,50,300],[686,634,34,246],[714,598,28,282],
+    [762,588,48,292],[804,652,36,228],[834,614,28,266],
+    [892,592,46,288],[932,638,30,242],
+    // 中層ギャップ (y 308–510)
+    [195,310,44,195],[234,346,30,159],[258,322,26,183],
+    [338,304,52,201],[384,340,36,165],[414,314,28,191],
+    [462,300,52,205],[508,336,38,169],[542,306,42,199],[578,320,28,185],
+    [642,302,50,203],[686,340,34,165],[716,312,26,193],
+    [760,304,50,201],[804,342,36,163],[832,316,26,189],
+    [878,308,46,197],[920,344,30,161],
+    // 上層ギャップ (y 98–265)
+    [198,100,42,160],[234,130,28,130],[256,108,22,152],
+    [340, 96,50,168],[384,126,34,138],[412,102,26,162],
+    [464, 96,50,168],[508,128,36,136],[542,100,38,164],
+    [644, 97,48,167],[686,128,32,136],[716,102,24,162],
+    [752, 96,50,168],[796,127,34,137],[824,101,24,163],
+    [882,100,44,164],[920,130,28,134],
+    // 左右変明け
+    [0,180,38,750],[0,380,24,550],
+    [1088,190,32,740],[1100,400,20,530],
+  ];
+
+  function drawBuildings() {
+    ctx.save();
+    BLDGS.forEach(([bx, by, bw, bh]) => {
+      // ビル本体
+      const g = ctx.createLinearGradient(bx, by, bx, by + bh);
+      g.addColorStop(0, '#0c0c20');
+      g.addColorStop(1, '#060612');
+      ctx.fillStyle = g;
+      ctx.fillRect(bx, by, bw, bh);
+
+      // 外枠（ネオンエッジ）
+      ctx.strokeStyle = 'rgba(0,229,255,0.07)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(bx, by, bw, bh);
+
+      // 窓
+      const cg = 9, rg = 8;
+      const cols = Math.floor((bw - 6) / cg);
+      const rows = Math.floor((bh - 8) / rg);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const seed = (bx * 3 + c * 7 + r * 11) % 9;
+          if (seed < 5) {
+            const wx = bx + 3 + c * cg;
+            const wy = by + 5 + r * rg;
+            const warm = (bx + c + r) % 3 === 0;
+            const alpha = 0.28 + (seed % 3) * 0.1;
+            ctx.fillStyle = warm
+              ? `rgba(255,210,80,${alpha})`
+              : `rgba(150,210,255,${alpha - 0.06})`;
+            ctx.fillRect(wx, wy, 5, 3);
+          }
+        }
+      }
+
+      // アンテナ（高いビルのみ）
+      if (bh > 220) {
+        const ax = bx + bw / 2;
+        ctx.fillStyle = 'rgba(100,130,180,0.4)';
+        ctx.fillRect(ax - 1, by - 14, 2, 14);
+        ctx.save();
+        ctx.shadowColor = '#ff4040';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(ax, by - 16, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,60,60,0.9)';
+        ctx.fill();
+        ctx.restore();
+      }
+    });
+    ctx.restore();
   }
 
   function drawRoad() {
     const roadW = SQ_H + 30;
     ctx.save();
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    // アスファルト層
     ctx.lineWidth = roadW + 18; ctx.strokeStyle = '#020208'; traceWay(); ctx.stroke();
     ctx.lineWidth = roadW + 6;  ctx.strokeStyle = '#07071a'; traceWay(); ctx.stroke();
     ctx.lineWidth = roadW;      ctx.strokeStyle = '#0c0c22'; traceWay(); ctx.stroke();
-    // ネオンエッジグロー
     ctx.lineWidth = roadW + 2;  ctx.strokeStyle = 'rgba(0,229,255,0.06)'; traceWay(); ctx.stroke();
-    // センターライン
     ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,0.07)';
     ctx.setLineDash([16, 26]); traceWay(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
@@ -384,40 +440,27 @@
     if (num % 5  === 0) return '#e040fb';
     return '#1a1a38';
   }
-
   function rr(x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
-    ctx.arcTo(x+w,y,   x+w,y+r,  r); ctx.lineTo(x+w,y+h-r);
-    ctx.arcTo(x+w,y+h, x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
-    ctx.arcTo(x,y+h,   x,y+h-r, r); ctx.lineTo(x,y+r);
-    ctx.arcTo(x,y,     x+r,y,   r); ctx.closePath();
+    ctx.arcTo(x+w,y,x+w,y+r,r); ctx.lineTo(x+w,y+h-r);
+    ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
+    ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r);
+    ctx.arcTo(x,y,x+r,y,r); ctx.closePath();
   }
-
   function drawSquare({ num, x, y }) {
     const isGoal = num===100, isStart = num===1;
     const w = isGoal ? GOAL_W : SQ_W, h = isGoal ? GOAL_H : SQ_H;
     const sx = x+(SQ_W-w)/2, sy = y+(SQ_H-h)/2;
     const border = squareBorder(num);
-    const isSpecial = isGoal || isStart || num % 10 === 0;
-
     ctx.save();
-    if (isSpecial) {
-      ctx.shadowColor = border;
-      ctx.shadowBlur  = isGoal ? 22 : isStart ? 16 : 10;
-    }
-    ctx.fillStyle = squareGrad(num,sx,sy,w,h);
-    rr(sx,sy,w,h,5); ctx.fill();
+    if (isGoal || isStart || num % 10 === 0) { ctx.shadowColor = border; ctx.shadowBlur = isGoal ? 22 : isStart ? 16 : 10; }
+    ctx.fillStyle = squareGrad(num,sx,sy,w,h); rr(sx,sy,w,h,5); ctx.fill();
     ctx.restore();
-
-    ctx.strokeStyle = border;
-    ctx.lineWidth   = isGoal || isStart ? 2 : 1;
+    ctx.strokeStyle = border; ctx.lineWidth = isGoal||isStart ? 2 : 1;
     rr(sx,sy,w,h,5); ctx.stroke();
-
-    // トップハイライト
     ctx.save(); ctx.globalAlpha=0.08; ctx.fillStyle='#fff';
     ctx.beginPath(); ctx.roundRect(sx+1,sy+1,w-2,h*.3,[5,5,0,0]); ctx.fill(); ctx.restore();
-
     ctx.textAlign='center'; ctx.textBaseline='middle';
     const cx=sx+w/2, cy=sy+h/2;
     if (isGoal) {
@@ -426,31 +469,23 @@
     } else if (isStart) {
       ctx.fillStyle='#00ff88'; ctx.font='bold 12px Segoe UI'; ctx.fillText('START',cx,cy);
     } else {
-      const is10 = num % 10 === 0, is5 = num % 5 === 0;
-      ctx.fillStyle = is10 ? '#ff9040' : is5 ? '#d070ff' : '#303878';
-      ctx.font = is10 ? 'bold 12px Segoe UI' : '11px Segoe UI';
+      ctx.fillStyle = num%10===0 ? '#ff9040' : num%5===0 ? '#d070ff' : '#303878';
+      ctx.font = num%10===0 ? 'bold 12px Segoe UI' : '11px Segoe UI';
       ctx.fillText(num,cx,cy);
     }
   }
 
   function drawTokens() {
     const byPos = {};
-    players.forEach(p => {
-      const pos = playerPositions[p.player_id] || 1;
-      (byPos[pos] = byPos[pos]||[]).push(p);
-    });
+    players.forEach(p => { const pos=playerPositions[p.player_id]||1; (byPos[pos]=byPos[pos]||[]).push(p); });
     Object.entries(byPos).forEach(([posStr, group]) => {
-      const idx = parseInt(posStr)-1;
+      const idx=parseInt(posStr)-1;
       if (idx<0||idx>=squares.length) return;
-      const {x,y} = squares[idx];
-      const cx=x+SQ_W/2, cy=y+SQ_H/2;
+      const {x,y}=squares[idx], cx=x+SQ_W/2, cy=y+SQ_H/2;
       group.forEach((p,i) => {
         const off=tokenOffset(group.length,i), tx=cx+off.x, ty=cy+off.y, R=14;
-        ctx.save();
-        ctx.shadowColor=p.color; ctx.shadowBlur=18;
-        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2);
-        ctx.fillStyle=p.color; ctx.fill();
-        ctx.restore();
+        ctx.save(); ctx.shadowColor=p.color; ctx.shadowBlur=18;
+        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill(); ctx.restore();
         const tg=ctx.createRadialGradient(tx-R*.3,ty-R*.3,R*.05,tx,ty,R);
         tg.addColorStop(0,'rgba(255,255,255,0.5)'); tg.addColorStop(1,'rgba(0,0,0,0)');
         ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=tg; ctx.fill();
