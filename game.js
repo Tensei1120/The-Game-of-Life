@@ -126,7 +126,6 @@
         .from('rooms').select('id,host_id,status').eq('id', roomId).maybeSingle();
       if (fe) throw fe;
 
-      // 解散済みルームは入れない
       if (existing?.status === 'closed') {
         wordError.textContent = 'このルームは解散されています。別のあいことばを試してください。';
         btn.disabled = false; btn.textContent = 'ルームに入る';
@@ -152,7 +151,6 @@
       );
       if (pe) throw pe;
 
-      // ホストの場合、ページを閉じたときにルームを解散
       if (isHost) {
         window.addEventListener('beforeunload', dissolveRoom);
       }
@@ -174,8 +172,6 @@
     }
   }
 
-  // ── ホスト退出時のルーム解散 ──
-  // keepalive: true でページアンロード後もリクエストを完了させる
   function dissolveRoom() {
     if (!isHost || !roomId) return;
     fetch(
@@ -232,7 +228,6 @@
   async function onRoomChange(room) {
     if (!room) return;
 
-    // ホストが退出 → 参加者に通知
     if (room.status === 'closed') {
       if (!isHost) showDissolutionOverlay();
       return;
@@ -256,7 +251,6 @@
     $('dissolution-overlay').classList.remove('hidden');
     setTimeout(() => {
       $('dissolution-overlay').classList.add('hidden');
-      // 状態をリセット
       roomId = ''; players = []; isHost = false;
       playerPositions = {};
       nameInput.value = ''; wordInput.value = '';
@@ -278,7 +272,6 @@
     drawBoard();
   }
 
-  // ── ターンUI ──
   function updateTurnUI() {
     if (!players.length) return;
     const idx = currentPlayerIndex % players.length;
@@ -307,7 +300,6 @@
     }).join('');
   }
 
-  // ── サイコロ ──
   $('btn-roll').addEventListener('click', async () => {
     if (!isMyTurn || rolling) return;
     rolling = true;
@@ -336,7 +328,6 @@
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  // ── ボード描画 ──
   function drawBoard() {
     const bg = ctx.createLinearGradient(0, 0, CW, CH);
     bg.addColorStop(0, '#0c1e30'); bg.addColorStop(1, '#060f1c');
