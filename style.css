@@ -1,0 +1,140 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: 'Segoe UI', sans-serif;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 900px;
+}
+
+h1 {
+  font-size: 2rem;
+  color: #a0d8ef;
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+
+.stats {
+  display: flex;
+  gap: 32px;
+  font-size: 1rem;
+  color: #b0b0c0;
+}
+
+.stats strong {
+  color: #a0d8ef;
+  font-size: 1.1rem;
+}
+
+#canvas {
+  border: 2px solid #2a4a6a;
+  border-radius: 4px;
+  cursor: crosshair;
+  image-rendering: pixelated;
+  max-width: 100%;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+button {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  background: #2a4a6a;
+  color: #e0e0e0;
+  transition: background 0.2s, transform 0.1s;
+}
+
+button:hover {
+  background: #3a6a9a;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+#btn-start {
+  background: #1a6a3a;
+}
+
+#btn-start:hover {
+  background: #2a8a4a;
+}
+
+#btn-start.running {
+  background: #8a2a1a;
+}
+
+#btn-start.running:hover {
+  background: #aa3a2a;
+}
+
+.speed-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #b0b0c0;
+}
+
+.speed-control label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#speed {
+  width: 140px;
+  accent-color: #a0d8ef;
+}
+
+#speed-label {
+  width: 60px;
+  color: #a0d8ef;
+}
+
+.presets {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  color: #b0b0c0;
+}
+
+.preset-btn {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  background: #3a3a5a;
+}
+
+.preset-btn:hover {
+  background: #5a5a8a;
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: #606080;
+}
