@@ -101,59 +101,66 @@ body {
 .hint { font-size:.8rem; color:#506070; text-align:center; }
 
 /* ── ゲーム画面 ── */
-.container {
-  display:flex; flex-direction:column; align-items:center; gap:12px;
-  width:100%; max-width:920px;
-}
+.container { display:flex; flex-direction:column; align-items:center; gap:12px; width:100%; max-width:1140px; }
 .game-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:center; }
 .game-header h2 { font-size:1.4rem; font-weight:700; color:#a0d8ef; letter-spacing:.05em; }
-#room-badge {
-  padding:4px 14px; border-radius:20px; background:#1a3a5a;
-  border:1px solid #2a5a8a; font-size:.85rem; color:#80c0e0;
-}
+#room-badge { padding:4px 14px; border-radius:20px; background:#1a3a5a; border:1px solid #2a5a8a; font-size:.85rem; color:#80c0e0; }
 .turn-info { text-align:center; }
 #turn-indicator { font-size:1.15rem; font-weight:700; }
-
 .canvas-wrapper { width:100%; overflow-x:auto; }
-#board-canvas {
-  display:block;
-  max-width:100%;
-  border-radius:8px;
-}
-
-/* ── サイコロ ── */
-#dice-area {
-  display:flex; flex-direction:column; align-items:center; gap:10px;
-}
-#dice-result {
-  font-size:2rem;
-  min-height:2.4rem;
-  letter-spacing:.05em;
-  color:#ffd700;
-  text-align:center;
-}
+#board-canvas { display:block; max-width:100%; border-radius:8px; }
+#dice-area { display:flex; flex-direction:column; align-items:center; gap:10px; }
+#dice-result { font-size:2rem; min-height:2.4rem; color:#ffd700; text-align:center; }
 #btn-roll {
   padding:12px 40px; font-size:1.1rem; font-weight:700; letter-spacing:.08em;
-  border:none; border-radius:50px;
-  background:#a0d8ef; color:#0d1b2a;
+  border:none; border-radius:50px; background:#a0d8ef; color:#0d1b2a;
   cursor:pointer; transition:transform .15s, box-shadow .15s;
   box-shadow:0 0 16px rgba(160,216,239,.4);
 }
 #btn-roll:hover { background:#c8eaf8; transform:scale(1.05); }
 #btn-roll:active { transform:scale(.97); }
 #btn-roll:disabled { opacity:.5; cursor:not-allowed; transform:none; }
-
-/* ── プレイヤーリスト ── */
-#game-player-list {
-  list-style:none; display:flex; gap:10px; flex-wrap:wrap; justify-content:center;
-}
-.gpl-item {
-  display:flex; align-items:center; gap:6px; padding:6px 12px;
-  border-radius:20px; background:#132336; border:1px solid #2a4a6a;
-  font-size:.85rem; color:#90a8b8;
-}
-.gpl-item.gpl-active {
-  background:#1a3a5a; border-color:#a0d8ef; color:#e0f0ff; font-weight:700;
-}
+#game-player-list { list-style:none; display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+.gpl-item { display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; background:#132336; border:1px solid #2a4a6a; font-size:.85rem; color:#90a8b8; }
+.gpl-item.gpl-active { background:#1a3a5a; border-color:#a0d8ef; color:#e0f0ff; font-weight:700; }
 .stats { font-size:.95rem; color:#b0b0c0; }
 .stats strong { color:#a0d8ef; }
+
+/* ── 解散オーバーレイ ── */
+#dissolution-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 100;
+  animation: fadeInOverlay 0.4s ease;
+}
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.dissolution-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  background: #132336;
+  border: 1px solid #2a4a6a;
+  border-radius: 20px;
+  padding: 48px 56px;
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+}
+.dissolution-icon { font-size: 3rem; }
+.dissolution-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #e07070;
+}
+.dissolution-sub {
+  font-size: 1rem;
+  color: #8090a0;
+  line-height: 1.7;
+}

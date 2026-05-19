@@ -5,53 +5,25 @@
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
   // ── ボード定数 ──
-  const CW     = 1120;  // canvas 幅
-  const CH     = 930;   // canvas 高さ
-  const SQ_W   = 64;    // マス幅
-  const SQ_H   = 48;    // マス高さ
+  const CW     = 1120;
+  const CH     = 930;
+  const SQ_W   = 64;
+  const SQ_H   = 48;
   const GOAL_W = 94;
   const GOAL_H = 70;
 
   const PLAYER_COLORS = ['#a0d8ef','#f08080','#90ee90','#ffd700','#da70d6','#ff8c00'];
 
-  //
-  // 道のウェイポイント定義
-  // 左下 START → 右下 → 右上 → 左中 → 右中 → 上 → GOAL
-  //
   const WAYPOINTS = [
-    [ 80, 865],  // START
-    [215, 878],
-    [365, 862],
-    [515, 878],
-    [665, 862],
-    [820, 875],
-    [970, 862],
-    [1055, 790],
-    [1060, 695],
-    [1055, 600],
-    [940,  535],
-    [775,  518],
-    [615,  530],
-    [455,  518],
-    [295,  530],
-    [145,  518],
-    [ 68,  450],
-    [ 72,  358],
-    [165,  290],
-    [325,  272],
-    [485,  285],
-    [645,  272],
-    [805,  285],
-    [960,  272],
-    [1052, 205],
-    [1056, 122],
-    [958,   58],
-    [795,   44],
-    [630,   56],
-    [470,   44],
-    [310,   56],
-    [158,   46],
-    [ 76,   80],  // GOAL
+    [ 80, 865],
+    [215, 878], [365, 862], [515, 878], [665, 862], [820, 875], [970, 862],
+    [1055, 790], [1060, 695], [1055, 600],
+    [940, 535], [775, 518], [615, 530], [455, 518], [295, 530], [145, 518],
+    [ 68, 450], [ 72, 358],
+    [165, 290], [325, 272], [485, 285], [645, 272], [805, 285], [960, 272],
+    [1052, 205], [1056, 122],
+    [958, 58], [795, 44], [630, 56], [470, 44], [310, 56], [158, 46],
+    [ 76,  80],
   ];
 
   // ── セッションID ──
@@ -70,11 +42,9 @@
   let rolling            = false;
   let channel            = null;
 
-  // ── ウェイポイントから 100マスの座標を生成 ──
   const squares = buildSquares();
 
   function buildSquares() {
-    // 各セグメントの長さを計算
     const segLens = [];
     let total = 0;
     for (let i = 1; i < WAYPOINTS.length; i++) {
@@ -84,10 +54,8 @@
       segLens.push(len);
       total += len;
     }
-
     const spacing = total / 99;
     const sqs = [];
-
     for (let n = 0; n < 100; n++) {
       const target = n * spacing;
       let traveled = 0, seg = 0;
@@ -97,9 +65,11 @@
       const t  = segLens[seg] > 0 ? Math.min((target - traveled) / segLens[seg], 1) : 0;
       const p0 = WAYPOINTS[seg];
       const p1 = WAYPOINTS[Math.min(seg + 1, WAYPOINTS.length - 1)];
-      const cx = p0[0] + (p1[0] - p0[0]) * t;
-      const cy = p0[1] + (p1[1] - p0[1]) * t;
-      sqs.push({ num: n + 1, x: cx - SQ_W / 2, y: cy - SQ_H / 2 });
+      sqs.push({
+        num: n + 1,
+        x: p0[0] + (p1[0] - p0[0]) * t - SQ_W / 2,
+        y: p0[1] + (p1[1] - p0[1]) * t - SQ_H / 2,
+      });
     }
     return sqs;
   }
@@ -153,8 +123,16 @@
 
     try {
       const { data: existing, error: fe } = await sb
-        .from('rooms').select('id,host_id').eq('id', roomId).maybeSingle();
+        .from('rooms').select('id,host_id,status').eq('id', roomId).maybeSingle();
       if (fe) throw fe;
+
+      // 解散済みルームは入れない
+      if (existing?.status === 'closed') {
+        wordError.textContent = 'このルームは解散されています。別のあいことばを試してください。';
+        btn.disabled = false; btn.textContent = 'ルームに入る';
+        return;
+      }
+
       if (!existing) {
         const { error } = await sb.from('rooms')
           .insert({ id: roomId, host_id: myId, alive_cells: {} });
@@ -163,14 +141,22 @@
       } else {
         isHost = existing.host_id === myId;
       }
+
       const { data: ep } = await sb.from('room_players').select('color').eq('room_id', roomId);
       const usedColors = (ep || []).map(p => p.color);
       const myColor    = PLAYER_COLORS.find(c => !usedColors.includes(c)) || PLAYER_COLORS[0];
+
       const { error: pe } = await sb.from('room_players').upsert(
         { room_id: roomId, player_id: myId, player_name: myName, color: myColor, is_host: isHost },
         { onConflict: 'room_id,player_id' }
       );
       if (pe) throw pe;
+
+      // ホストの場合、ページを閉じたときにルームを解散
+      if (isHost) {
+        window.addEventListener('beforeunload', dissolveRoom);
+      }
+
       await refreshPlayers();
       subscribeRoom();
       showScreen('lobby-screen');
@@ -186,6 +172,26 @@
     } finally {
       btn.disabled = false; btn.textContent = 'ルームに入る';
     }
+  }
+
+  // ── ホスト退出時のルーム解散 ──
+  // keepalive: true でページアンロード後もリクエストを完了させる
+  function dissolveRoom() {
+    if (!isHost || !roomId) return;
+    fetch(
+      `${SUPABASE_URL}/rest/v1/rooms?id=eq.${encodeURIComponent(roomId)}`,
+      {
+        method:  'PATCH',
+        headers: {
+          'Content-Type':  'application/json',
+          'apikey':        SUPABASE_ANON,
+          'Authorization': `Bearer ${SUPABASE_ANON}`,
+          'Prefer':        'return=minimal',
+        },
+        body:      JSON.stringify({ status: 'closed' }),
+        keepalive: true,
+      }
+    );
   }
 
   // ── 待機室 ──
@@ -222,8 +228,16 @@
       }, () => refreshPlayers())
       .subscribe();
   }
+
   async function onRoomChange(room) {
     if (!room) return;
+
+    // ホストが退出 → 参加者に通知
+    if (room.status === 'closed') {
+      if (!isHost) showDissolutionOverlay();
+      return;
+    }
+
     if (room.status === 'playing') {
       const { data } = await sb.from('room_players').select('*')
         .eq('room_id', roomId).order('joined_at');
@@ -236,6 +250,18 @@
         applyRoomState(room);
       }
     }
+  }
+
+  function showDissolutionOverlay() {
+    $('dissolution-overlay').classList.remove('hidden');
+    setTimeout(() => {
+      $('dissolution-overlay').classList.add('hidden');
+      // 状態をリセット
+      roomId = ''; players = []; isHost = false;
+      playerPositions = {};
+      nameInput.value = ''; wordInput.value = '';
+      showScreen('title-screen');
+    }, 3000);
   }
 
   // ── Canvas ──
@@ -258,7 +284,6 @@
     const idx = currentPlayerIndex % players.length;
     const cp  = players[idx];
     isMyTurn  = cp?.player_id === myId;
-
     const ind = $('turn-indicator');
     if (isMyTurn) {
       ind.textContent = 'あなたのターンです！';
@@ -287,10 +312,10 @@
     if (!isMyTurn || rolling) return;
     rolling = true;
     $('btn-roll').disabled = true;
-    const roll     = Math.floor(Math.random() * 6) + 1;
+    const roll = Math.floor(Math.random() * 6) + 1;
     await animateDice(roll);
-    const curPos   = playerPositions[myId] || 1;
-    const newPos   = Math.min(curPos + roll, 100);
+    const curPos = playerPositions[myId] || 1;
+    const newPos = Math.min(curPos + roll, 100);
     const newPositions = { ...playerPositions, [myId]: newPos };
     const nextIndex    = (currentPlayerIndex + 1) % players.length;
     await sb.from('rooms').update({
@@ -313,204 +338,110 @@
 
   // ── ボード描画 ──
   function drawBoard() {
-    // 背景グラデーション
     const bg = ctx.createLinearGradient(0, 0, CW, CH);
-    bg.addColorStop(0, '#0c1e30');
-    bg.addColorStop(1, '#060f1c');
+    bg.addColorStop(0, '#0c1e30'); bg.addColorStop(1, '#060f1c');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, CW, CH);
-
     drawRoad();
     squares.forEach(drawSquare);
     drawTokens();
   }
 
-  // 道路描画（ウェイポイントをそのままストローク）
   function drawRoad() {
     const roadW = SQ_H + 30;
-
-    // 境界影
     ctx.save();
-    ctx.lineWidth   = roadW + 20;
-    ctx.strokeStyle = '#03090f';
-    ctx.lineJoin    = 'round';
-    ctx.lineCap     = 'round';
-    traceWay();
-    ctx.stroke();
-
-    // 道路外側（暗い縁）
-    ctx.lineWidth   = roadW + 6;
-    ctx.strokeStyle = '#081828';
-    traceWay();
-    ctx.stroke();
-
-    // 道路面
-    ctx.lineWidth   = roadW;
-    ctx.strokeStyle = '#0e2438';
-    traceWay();
-    ctx.stroke();
-
-    // 道路内側の光
-    ctx.lineWidth   = roadW - 18;
-    ctx.strokeStyle = 'rgba(30,70,110,0.35)';
-    traceWay();
-    ctx.stroke();
-
-    // 中央破線
-    ctx.lineWidth   = 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.setLineDash([18, 22]);
-    traceWay();
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.lineWidth = roadW + 20; ctx.strokeStyle = '#03090f'; traceWay(); ctx.stroke();
+    ctx.lineWidth = roadW + 6;  ctx.strokeStyle = '#081828'; traceWay(); ctx.stroke();
+    ctx.lineWidth = roadW;      ctx.strokeStyle = '#0e2438'; traceWay(); ctx.stroke();
+    ctx.lineWidth = roadW - 18; ctx.strokeStyle = 'rgba(30,70,110,0.35)'; traceWay(); ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.setLineDash([18, 22]); traceWay(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
-
   function traceWay() {
     ctx.beginPath();
-    WAYPOINTS.forEach(([x, y], i) =>
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
-    );
+    WAYPOINTS.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
   }
 
-  // マスの属性
   function squareGrad(num, sx, sy, w, h) {
     const g = ctx.createLinearGradient(sx, sy, sx, sy + h);
-    if (num === 1) {
-      g.addColorStop(0, '#1e8a40'); g.addColorStop(1, '#0c4a20');
-    } else if (num === 100) {
-      g.addColorStop(0, '#a07800'); g.addColorStop(1, '#5a4200');
-    } else if (num % 10 === 0) {
-      g.addColorStop(0, '#7a4a10'); g.addColorStop(1, '#3e2408');
-    } else if (num % 5 === 0) {
-      g.addColorStop(0, '#1e5888'); g.addColorStop(1, '#0e2c48');
-    } else {
-      g.addColorStop(0, '#1c3a56'); g.addColorStop(1, '#0e2030');
-    }
+    if      (num === 1)       { g.addColorStop(0,'#1e8a40'); g.addColorStop(1,'#0c4a20'); }
+    else if (num === 100)     { g.addColorStop(0,'#a07800'); g.addColorStop(1,'#5a4200'); }
+    else if (num % 10 === 0) { g.addColorStop(0,'#7a4a10'); g.addColorStop(1,'#3e2408'); }
+    else if (num % 5  === 0) { g.addColorStop(0,'#1e5888'); g.addColorStop(1,'#0e2c48'); }
+    else                     { g.addColorStop(0,'#1c3a56'); g.addColorStop(1,'#0e2030'); }
     return g;
   }
   function squareBorder(num) {
-    if (num === 1)         return '#50f090';
-    if (num === 100)       return '#ffd700';
-    if (num % 10 === 0)    return '#e09030';
-    if (num % 5  === 0)    return '#50a0e0';
+    if (num === 1)       return '#50f090';
+    if (num === 100)     return '#ffd700';
+    if (num % 10 === 0) return '#e09030';
+    if (num % 5  === 0) return '#50a0e0';
     return '#204a6e';
   }
-
   function rr(x, y, w, h, r) {
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.arcTo(x+w, y,   x+w, y+r,   r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
-    ctx.lineTo(x + r, y + h);
-    ctx.arcTo(x, y+h, x, y+h-r,     r);
-    ctx.lineTo(x, y + r);
-    ctx.arcTo(x, y,   x+r, y,       r);
-    ctx.closePath();
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+    ctx.arcTo(x+w,y,   x+w,y+r,  r); ctx.lineTo(x+w,y+h-r);
+    ctx.arcTo(x+w,y+h, x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
+    ctx.arcTo(x,y+h,   x,y+h-r, r); ctx.lineTo(x,y+r);
+    ctx.arcTo(x,y,     x+r,y,   r); ctx.closePath();
   }
-
   function drawSquare({ num, x, y }) {
-    const isGoal  = num === 100;
-    const isStart = num === 1;
-    const w  = isGoal ? GOAL_W : SQ_W;
-    const h  = isGoal ? GOAL_H : SQ_H;
-    const sx = x + (SQ_W - w) / 2;
-    const sy = y + (SQ_H - h) / 2;
-
-    // 影
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.7)';
-    ctx.shadowBlur  = 8;
-    ctx.fillStyle   = squareGrad(num, sx, sy, w, h);
-    rr(sx, sy, w, h, 8);
-    ctx.fill();
-    ctx.restore();
-
-    // 枠線
-    ctx.strokeStyle = squareBorder(num);
-    ctx.lineWidth   = isGoal || isStart ? 2.5 : 1.5;
-    rr(sx, sy, w, h, 8);
-    ctx.stroke();
-
-    // 上辺光沢
-    ctx.save();
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle   = '#fff';
-    ctx.beginPath();
-    ctx.roundRect(sx+2, sy+2, w-4, h*0.38, [8,8,0,0]);
-    ctx.fill();
-    ctx.restore();
-
-    // テキスト
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    const cx = sx + w/2, cy = sy + h/2;
+    const isGoal = num===100, isStart = num===1;
+    const w = isGoal ? GOAL_W : SQ_W, h = isGoal ? GOAL_H : SQ_H;
+    const sx = x+(SQ_W-w)/2, sy = y+(SQ_H-h)/2;
+    ctx.save(); ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=8;
+    ctx.fillStyle = squareGrad(num,sx,sy,w,h); rr(sx,sy,w,h,8); ctx.fill(); ctx.restore();
+    ctx.strokeStyle=squareBorder(num); ctx.lineWidth=isGoal||isStart?2.5:1.5;
+    rr(sx,sy,w,h,8); ctx.stroke();
+    ctx.save(); ctx.globalAlpha=0.18; ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.roundRect(sx+2,sy+2,w-4,h*0.38,[8,8,0,0]); ctx.fill(); ctx.restore();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const cx=sx+w/2, cy=sy+h/2;
     if (isGoal) {
-      ctx.fillStyle = '#ffd700';
-      ctx.font = 'bold 15px Segoe UI';
-      ctx.fillText('GOAL', cx, cy - 13);
-      ctx.font = '24px serif';
-      ctx.fillText('🏆', cx, cy + 12);
+      ctx.fillStyle='#ffd700'; ctx.font='bold 15px Segoe UI'; ctx.fillText('GOAL',cx,cy-13);
+      ctx.font='24px serif'; ctx.fillText('🏆',cx,cy+12);
     } else if (isStart) {
-      ctx.fillStyle = '#70ffa0';
-      ctx.font = 'bold 13px Segoe UI';
-      ctx.fillText('START', cx, cy);
+      ctx.fillStyle='#70ffa0'; ctx.font='bold 13px Segoe UI'; ctx.fillText('START',cx,cy);
     } else {
-      ctx.fillStyle = num % 5 === 0 ? '#90ccf0' : '#608098';
-      ctx.font = num % 10 === 0 ? 'bold 13px Segoe UI' : '12px Segoe UI';
-      ctx.fillText(num, cx, cy);
+      ctx.fillStyle=num%5===0?'#90ccf0':'#608098';
+      ctx.font=num%10===0?'bold 13px Segoe UI':'12px Segoe UI';
+      ctx.fillText(num,cx,cy);
     }
   }
 
-  // ── トークン ──
   function drawTokens() {
     const byPos = {};
     players.forEach(p => {
       const pos = playerPositions[p.player_id] || 1;
-      (byPos[pos] = byPos[pos] || []).push(p);
+      (byPos[pos] = byPos[pos]||[]).push(p);
     });
     Object.entries(byPos).forEach(([posStr, group]) => {
-      const idx = parseInt(posStr) - 1;
-      if (idx < 0 || idx >= squares.length) return;
-      const { x, y } = squares[idx];
-      const cx = x + SQ_W/2, cy = y + SQ_H/2;
-      group.forEach((p, i) => {
-        const off = tokenOffset(group.length, i);
-        const tx = cx + off.x, ty = cy + off.y;
-        const R  = 15;
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.9)';
-        ctx.shadowBlur  = 10;
-        ctx.beginPath();
-        ctx.arc(tx, ty, R, 0, Math.PI*2);
-        ctx.fillStyle = p.color;
-        ctx.fill();
-        ctx.restore();
-        // 光沢
-        const tg = ctx.createRadialGradient(tx-R*.35, ty-R*.35, R*.08, tx, ty, R);
-        tg.addColorStop(0, 'rgba(255,255,255,0.55)');
-        tg.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.beginPath(); ctx.arc(tx, ty, R, 0, Math.PI*2);
-        ctx.fillStyle = tg; ctx.fill();
-        // 帯
-        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(tx, ty, R, 0, Math.PI*2); ctx.stroke();
-        // イニシャル
-        ctx.fillStyle = '#000';
-        ctx.font = 'bold 11px Segoe UI';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(p.player_name[0].toUpperCase(), tx, ty);
+      const idx = parseInt(posStr)-1;
+      if (idx<0||idx>=squares.length) return;
+      const {x,y} = squares[idx];
+      const cx=x+SQ_W/2, cy=y+SQ_H/2;
+      group.forEach((p,i) => {
+        const off=tokenOffset(group.length,i), tx=cx+off.x, ty=cy+off.y, R=15;
+        ctx.save(); ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10;
+        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill(); ctx.restore();
+        const tg=ctx.createRadialGradient(tx-R*.35,ty-R*.35,R*.08,tx,ty,R);
+        tg.addColorStop(0,'rgba(255,255,255,0.55)'); tg.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=tg; ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.75)'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.stroke();
+        ctx.fillStyle='#000'; ctx.font='bold 11px Segoe UI';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(p.player_name[0].toUpperCase(),tx,ty);
       });
     });
   }
-
-  function tokenOffset(total, i) {
-    if (total === 1) return { x: 0, y: 0 };
-    const a = (i / total) * Math.PI * 2 - Math.PI/2;
-    return { x: Math.cos(a)*13, y: Math.sin(a)*13 };
+  function tokenOffset(total,i) {
+    if (total===1) return {x:0,y:0};
+    const a=(i/total)*Math.PI*2-Math.PI/2;
+    return {x:Math.cos(a)*13,y:Math.sin(a)*13};
   }
 
 }());
