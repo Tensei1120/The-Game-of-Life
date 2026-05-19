@@ -11,7 +11,7 @@
   const GOAL_W = 94;
   const GOAL_H = 70;
 
-  const PLAYER_COLORS = ['#a0d8ef','#f08080','#90ee90','#ffd700','#da70d6','#ff8c00'];
+  const PLAYER_COLORS = ['#00e5ff','#ff2d78','#00ff88','#ffd740','#e040fb','#ff6d00'];
 
   const WAYPOINTS = [
     [ 80, 865],
@@ -122,14 +122,19 @@
       if (fe) throw fe;
 
       let roomData = existing;
-
       if (roomData) {
-        const isStale = roomData.status === 'closed' ||
-          (roomData.status === 'waiting' && roomData.host_id !== myId &&
-           Date.now() - new Date(roomData.created_at).getTime() > 5 * 60 * 1000);
+        const ageMs = Date.now() - new Date(roomData.created_at).getTime();
+        const isStale =
+          roomData.status === 'closed' ||
+          (roomData.host_id !== myId && roomData.status === 'waiting' && ageMs > 3 * 60 * 1000);
 
         if (isStale) {
-          await sb.from('rooms').delete().eq('id', roomId);
+          // DELETE を試み、RLSで失敗したら status='closed' にフォールバック
+          const { error: delErr } = await sb.from('rooms').delete().eq('id', roomId);
+          if (delErr) {
+            console.warn('DELETE failed, falling back to closed:', delErr.message);
+            await sb.from('rooms').update({ status: 'closed' }).eq('id', roomId);
+          }
           roomData = null;
         }
       }
@@ -198,7 +203,7 @@
     $('lobby-room-name').textContent = 'ルーム: ' + roomId;
     $('player-list').innerHTML = players.map(p => `
       <li class="player-item">
-        <span class="player-dot" style="background:${p.color}"></span>
+        <span class="player-dot" style="background:${p.color};box-shadow:0 0 6px ${p.color}"></span>
         <span class="player-name">${p.player_name}${p.is_host ? ' 👑' : ''}</span>
       </li>`).join('');
     $('btn-lobby-start').style.display = isHost ? 'block' : 'none';
@@ -272,10 +277,10 @@
     const ind = $('turn-indicator');
     if (isMyTurn) {
       ind.textContent = 'あなたのターンです！';
-      ind.style.color = '#90ee90';
+      ind.style.color = '#00ff88';
     } else {
       ind.textContent = (cp?.player_name || '?') + ' のターン';
-      ind.style.color = cp?.color || '#a0d8ef';
+      ind.style.color = cp?.color || '#00e5ff';
     }
     const rollBtn = $('btn-roll');
     rollBtn.style.display = isMyTurn ? 'block' : 'none';
@@ -285,7 +290,7 @@
     $('game-player-list').innerHTML = players.map((p, i) => {
       const pos = playerPositions[p.player_id] || 1;
       return `<li class="gpl-item ${i === idx ? 'gpl-active' : ''}">
-        <span class="player-dot" style="background:${p.color}"></span>
+        <span class="player-dot" style="background:${p.color};box-shadow:0 0 5px ${p.color}"></span>
         <span>${p.player_name}</span>
         <span style="color:${p.color};margin-left:4px">${pos}マス</span>
       </li>`;
@@ -320,11 +325,24 @@
   }
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+  // ── ボード描画 ──
   function drawBoard() {
-    const bg = ctx.createLinearGradient(0, 0, CW, CH);
-    bg.addColorStop(0, '#0c1e30'); bg.addColorStop(1, '#060f1c');
-    ctx.fillStyle = bg;
+    // ダークシティナイト背景
+    ctx.fillStyle = '#040410';
     ctx.fillRect(0, 0, CW, CH);
+
+    // シティグリッド
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,229,255,0.025)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= CW; x += 80) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+    }
+    for (let y = 0; y <= CH; y += 80) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+    }
+    ctx.restore();
+
     drawRoad();
     squares.forEach(drawSquare);
     drawTokens();
@@ -334,12 +352,15 @@
     const roadW = SQ_H + 30;
     ctx.save();
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.lineWidth = roadW + 20; ctx.strokeStyle = '#03090f'; traceWay(); ctx.stroke();
-    ctx.lineWidth = roadW + 6;  ctx.strokeStyle = '#081828'; traceWay(); ctx.stroke();
-    ctx.lineWidth = roadW;      ctx.strokeStyle = '#0e2438'; traceWay(); ctx.stroke();
-    ctx.lineWidth = roadW - 18; ctx.strokeStyle = 'rgba(30,70,110,0.35)'; traceWay(); ctx.stroke();
-    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.setLineDash([18, 22]); traceWay(); ctx.stroke(); ctx.setLineDash([]);
+    // アスファルト層
+    ctx.lineWidth = roadW + 18; ctx.strokeStyle = '#020208'; traceWay(); ctx.stroke();
+    ctx.lineWidth = roadW + 6;  ctx.strokeStyle = '#07071a'; traceWay(); ctx.stroke();
+    ctx.lineWidth = roadW;      ctx.strokeStyle = '#0c0c22'; traceWay(); ctx.stroke();
+    // ネオンエッジグロー
+    ctx.lineWidth = roadW + 2;  ctx.strokeStyle = 'rgba(0,229,255,0.06)'; traceWay(); ctx.stroke();
+    // センターライン
+    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.setLineDash([16, 26]); traceWay(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
   function traceWay() {
@@ -349,20 +370,21 @@
 
   function squareGrad(num, sx, sy, w, h) {
     const g = ctx.createLinearGradient(sx, sy, sx, sy + h);
-    if      (num === 1)       { g.addColorStop(0,'#1e8a40'); g.addColorStop(1,'#0c4a20'); }
-    else if (num === 100)     { g.addColorStop(0,'#a07800'); g.addColorStop(1,'#5a4200'); }
-    else if (num % 10 === 0) { g.addColorStop(0,'#7a4a10'); g.addColorStop(1,'#3e2408'); }
-    else if (num % 5  === 0) { g.addColorStop(0,'#1e5888'); g.addColorStop(1,'#0e2c48'); }
-    else                     { g.addColorStop(0,'#1c3a56'); g.addColorStop(1,'#0e2030'); }
+    if      (num === 1)      { g.addColorStop(0,'#004d22'); g.addColorStop(1,'#001a0c'); }
+    else if (num === 100)    { g.addColorStop(0,'#6a4d00'); g.addColorStop(1,'#2a1e00'); }
+    else if (num % 10 === 0) { g.addColorStop(0,'#4a1800'); g.addColorStop(1,'#1e0800'); }
+    else if (num % 5  === 0) { g.addColorStop(0,'#280050'); g.addColorStop(1,'#100020'); }
+    else                     { g.addColorStop(0,'#090916'); g.addColorStop(1,'#04040e'); }
     return g;
   }
   function squareBorder(num) {
-    if (num === 1)       return '#50f090';
-    if (num === 100)     return '#ffd700';
-    if (num % 10 === 0) return '#e09030';
-    if (num % 5  === 0) return '#50a0e0';
-    return '#204a6e';
+    if (num === 1)       return '#00ff88';
+    if (num === 100)     return '#ffd740';
+    if (num % 10 === 0) return '#ff6d00';
+    if (num % 5  === 0) return '#e040fb';
+    return '#1a1a38';
   }
+
   function rr(x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
@@ -371,26 +393,42 @@
     ctx.arcTo(x,y+h,   x,y+h-r, r); ctx.lineTo(x,y+r);
     ctx.arcTo(x,y,     x+r,y,   r); ctx.closePath();
   }
+
   function drawSquare({ num, x, y }) {
     const isGoal = num===100, isStart = num===1;
     const w = isGoal ? GOAL_W : SQ_W, h = isGoal ? GOAL_H : SQ_H;
     const sx = x+(SQ_W-w)/2, sy = y+(SQ_H-h)/2;
-    ctx.save(); ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=8;
-    ctx.fillStyle = squareGrad(num,sx,sy,w,h); rr(sx,sy,w,h,8); ctx.fill(); ctx.restore();
-    ctx.strokeStyle=squareBorder(num); ctx.lineWidth=isGoal||isStart?2.5:1.5;
-    rr(sx,sy,w,h,8); ctx.stroke();
-    ctx.save(); ctx.globalAlpha=0.18; ctx.fillStyle='#fff';
-    ctx.beginPath(); ctx.roundRect(sx+2,sy+2,w-4,h*0.38,[8,8,0,0]); ctx.fill(); ctx.restore();
+    const border = squareBorder(num);
+    const isSpecial = isGoal || isStart || num % 10 === 0;
+
+    ctx.save();
+    if (isSpecial) {
+      ctx.shadowColor = border;
+      ctx.shadowBlur  = isGoal ? 22 : isStart ? 16 : 10;
+    }
+    ctx.fillStyle = squareGrad(num,sx,sy,w,h);
+    rr(sx,sy,w,h,5); ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle = border;
+    ctx.lineWidth   = isGoal || isStart ? 2 : 1;
+    rr(sx,sy,w,h,5); ctx.stroke();
+
+    // トップハイライト
+    ctx.save(); ctx.globalAlpha=0.08; ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.roundRect(sx+1,sy+1,w-2,h*.3,[5,5,0,0]); ctx.fill(); ctx.restore();
+
     ctx.textAlign='center'; ctx.textBaseline='middle';
     const cx=sx+w/2, cy=sy+h/2;
     if (isGoal) {
-      ctx.fillStyle='#ffd700'; ctx.font='bold 15px Segoe UI'; ctx.fillText('GOAL',cx,cy-13);
-      ctx.font='24px serif'; ctx.fillText('🏆',cx,cy+12);
+      ctx.fillStyle='#ffd740'; ctx.font='bold 14px Segoe UI'; ctx.fillText('GOAL',cx,cy-12);
+      ctx.font='22px serif'; ctx.fillText('🏆',cx,cy+10);
     } else if (isStart) {
-      ctx.fillStyle='#70ffa0'; ctx.font='bold 13px Segoe UI'; ctx.fillText('START',cx,cy);
+      ctx.fillStyle='#00ff88'; ctx.font='bold 12px Segoe UI'; ctx.fillText('START',cx,cy);
     } else {
-      ctx.fillStyle=num%5===0?'#90ccf0':'#608098';
-      ctx.font=num%10===0?'bold 13px Segoe UI':'12px Segoe UI';
+      const is10 = num % 10 === 0, is5 = num % 5 === 0;
+      ctx.fillStyle = is10 ? '#ff9040' : is5 ? '#d070ff' : '#303878';
+      ctx.font = is10 ? 'bold 12px Segoe UI' : '11px Segoe UI';
       ctx.fillText(num,cx,cy);
     }
   }
@@ -407,15 +445,18 @@
       const {x,y} = squares[idx];
       const cx=x+SQ_W/2, cy=y+SQ_H/2;
       group.forEach((p,i) => {
-        const off=tokenOffset(group.length,i), tx=cx+off.x, ty=cy+off.y, R=15;
-        ctx.save(); ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=10;
-        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill(); ctx.restore();
-        const tg=ctx.createRadialGradient(tx-R*.35,ty-R*.35,R*.08,tx,ty,R);
-        tg.addColorStop(0,'rgba(255,255,255,0.55)'); tg.addColorStop(1,'rgba(0,0,0,0)');
+        const off=tokenOffset(group.length,i), tx=cx+off.x, ty=cy+off.y, R=14;
+        ctx.save();
+        ctx.shadowColor=p.color; ctx.shadowBlur=18;
+        ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2);
+        ctx.fillStyle=p.color; ctx.fill();
+        ctx.restore();
+        const tg=ctx.createRadialGradient(tx-R*.3,ty-R*.3,R*.05,tx,ty,R);
+        tg.addColorStop(0,'rgba(255,255,255,0.5)'); tg.addColorStop(1,'rgba(0,0,0,0)');
         ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=tg; ctx.fill();
-        ctx.strokeStyle='rgba(255,255,255,0.75)'; ctx.lineWidth=2;
+        ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=1.5;
         ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.stroke();
-        ctx.fillStyle='#000'; ctx.font='bold 11px Segoe UI';
+        ctx.fillStyle='#000'; ctx.font='bold 10px Segoe UI';
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(p.player_name[0].toUpperCase(),tx,ty);
       });
