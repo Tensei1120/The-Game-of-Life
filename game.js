@@ -5,21 +5,54 @@
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
   // ── ボード定数 ──
-  const COLS   = 10;
-  const ROWS   = 10;
-  const SQ_W   = 94;    // マス幅
-  const SQ_H   = 70;    // マス高さ
-  const GAP_X  = 24;    // 横間隔
-  const GAP_Y  = 40;    // 縦間隔
-  const MX     = 38;    // 左右マージン
-  const MY     = 38;    // 上下マージン
-  const GOAL_W = 124;   // GOALマス幅
-  const GOAL_H = 94;    // GOALマス高さ
-
-  const CW = MX * 2 + COLS * (SQ_W + GAP_X) - GAP_X;
-  const CH = MY * 2 + ROWS * (SQ_H + GAP_Y) - GAP_Y;
+  const CW     = 1120;  // canvas 幅
+  const CH     = 930;   // canvas 高さ
+  const SQ_W   = 64;    // マス幅
+  const SQ_H   = 48;    // マス高さ
+  const GOAL_W = 94;
+  const GOAL_H = 70;
 
   const PLAYER_COLORS = ['#a0d8ef','#f08080','#90ee90','#ffd700','#da70d6','#ff8c00'];
+
+  //
+  // 道のウェイポイント定義
+  // 左下 START → 右下 → 右上 → 左中 → 右中 → 上 → GOAL
+  //
+  const WAYPOINTS = [
+    [ 80, 865],  // START
+    [215, 878],
+    [365, 862],
+    [515, 878],
+    [665, 862],
+    [820, 875],
+    [970, 862],
+    [1055, 790],
+    [1060, 695],
+    [1055, 600],
+    [940,  535],
+    [775,  518],
+    [615,  530],
+    [455,  518],
+    [295,  530],
+    [145,  518],
+    [ 68,  450],
+    [ 72,  358],
+    [165,  290],
+    [325,  272],
+    [485,  285],
+    [645,  272],
+    [805,  285],
+    [960,  272],
+    [1052, 205],
+    [1056, 122],
+    [958,   58],
+    [795,   44],
+    [630,   56],
+    [470,   44],
+    [310,   56],
+    [158,   46],
+    [ 76,   80],  // GOAL
+  ];
 
   // ── セッションID ──
   let myId = sessionStorage.getItem('gol_pid');
@@ -37,19 +70,36 @@
   let rolling            = false;
   let channel            = null;
 
-  // ── マス座標 ──
+  // ── ウェイポイントから 100マスの座標を生成 ──
   const squares = buildSquares();
 
   function buildSquares() {
+    // 各セグメントの長さを計算
+    const segLens = [];
+    let total = 0;
+    for (let i = 1; i < WAYPOINTS.length; i++) {
+      const dx = WAYPOINTS[i][0] - WAYPOINTS[i-1][0];
+      const dy = WAYPOINTS[i][1] - WAYPOINTS[i-1][1];
+      const len = Math.sqrt(dx*dx + dy*dy);
+      segLens.push(len);
+      total += len;
+    }
+
+    const spacing = total / 99;
     const sqs = [];
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        const num     = row * COLS + col + 1;
-        const gridCol = row % 2 === 0 ? col : (COLS - 1 - col);
-        const x       = MX + gridCol * (SQ_W + GAP_X);
-        const y       = CH - MY - SQ_H - row * (SQ_H + GAP_Y);
-        sqs.push({ num, x, y });
+
+    for (let n = 0; n < 100; n++) {
+      const target = n * spacing;
+      let traveled = 0, seg = 0;
+      while (seg < segLens.length - 1 && traveled + segLens[seg] < target) {
+        traveled += segLens[seg++];
       }
+      const t  = segLens[seg] > 0 ? Math.min((target - traveled) / segLens[seg], 1) : 0;
+      const p0 = WAYPOINTS[seg];
+      const p1 = WAYPOINTS[Math.min(seg + 1, WAYPOINTS.length - 1)];
+      const cx = p0[0] + (p1[0] - p0[0]) * t;
+      const cy = p0[1] + (p1[1] - p0[1]) * t;
+      sqs.push({ num: n + 1, x: cx - SQ_W / 2, y: cy - SQ_H / 2 });
     }
     return sqs;
   }
@@ -105,7 +155,6 @@
       const { data: existing, error: fe } = await sb
         .from('rooms').select('id,host_id').eq('id', roomId).maybeSingle();
       if (fe) throw fe;
-
       if (!existing) {
         const { error } = await sb.from('rooms')
           .insert({ id: roomId, host_id: myId, alive_cells: {} });
@@ -114,17 +163,14 @@
       } else {
         isHost = existing.host_id === myId;
       }
-
       const { data: ep } = await sb.from('room_players').select('color').eq('room_id', roomId);
       const usedColors = (ep || []).map(p => p.color);
       const myColor    = PLAYER_COLORS.find(c => !usedColors.includes(c)) || PLAYER_COLORS[0];
-
       const { error: pe } = await sb.from('room_players').upsert(
         { room_id: roomId, player_id: myId, player_name: myName, color: myColor, is_host: isHost },
         { onConflict: 'room_id,player_id' }
       );
       if (pe) throw pe;
-
       await refreshPlayers();
       subscribeRoom();
       showScreen('lobby-screen');
@@ -149,7 +195,6 @@
     players = data || [];
     renderLobby();
   }
-
   function renderLobby() {
     $('lobby-room-name').textContent = 'ルーム: ' + roomId;
     $('player-list').innerHTML = players.map(p => `
@@ -160,7 +205,6 @@
     $('btn-lobby-start').style.display = isHost ? 'block' : 'none';
     $('lobby-hint').style.display      = isHost ? 'none'  : 'block';
   }
-
   $('btn-lobby-start').addEventListener('click', async () => {
     const initPos = {};
     players.forEach(p => { initPos[p.player_id] = 1; });
@@ -178,7 +222,6 @@
       }, () => refreshPlayers())
       .subscribe();
   }
-
   async function onRoomChange(room) {
     if (!room) return;
     if (room.status === 'playing') {
@@ -224,13 +267,11 @@
       ind.textContent = (cp?.player_name || '?') + ' のターン';
       ind.style.color = cp?.color || '#a0d8ef';
     }
-
     const rollBtn = $('btn-roll');
     rollBtn.style.display = isMyTurn ? 'block' : 'none';
     rollBtn.disabled = false;
     rolling = false;
     $('turn-number').textContent = turnNumber;
-
     $('game-player-list').innerHTML = players.map((p, i) => {
       const pos = playerPositions[p.player_id] || 1;
       return `<li class="gpl-item ${i === idx ? 'gpl-active' : ''}">
@@ -246,15 +287,12 @@
     if (!isMyTurn || rolling) return;
     rolling = true;
     $('btn-roll').disabled = true;
-
-    const roll = Math.floor(Math.random() * 6) + 1;
+    const roll     = Math.floor(Math.random() * 6) + 1;
     await animateDice(roll);
-
-    const curPos = playerPositions[myId] || 1;
-    const newPos = Math.min(curPos + roll, 100);
+    const curPos   = playerPositions[myId] || 1;
+    const newPos   = Math.min(curPos + roll, 100);
     const newPositions = { ...playerPositions, [myId]: newPos };
     const nextIndex    = (currentPlayerIndex + 1) % players.length;
-
     await sb.from('rooms').update({
       alive_cells:           newPositions,
       current_player_index:  nextIndex,
@@ -271,15 +309,15 @@
     }
     el.textContent = DICE_FACE[result - 1] + '　' + result + 'マス進む！';
   }
-
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ── ボード描画 ──
   function drawBoard() {
-    const grad = ctx.createLinearGradient(0, 0, 0, CH);
-    grad.addColorStop(0, '#0a1e30');
-    grad.addColorStop(1, '#060f1a');
-    ctx.fillStyle = grad;
+    // 背景グラデーション
+    const bg = ctx.createLinearGradient(0, 0, CW, CH);
+    bg.addColorStop(0, '#0c1e30');
+    bg.addColorStop(1, '#060f1c');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, CW, CH);
 
     drawRoad();
@@ -287,69 +325,89 @@
     drawTokens();
   }
 
+  // 道路描画（ウェイポイントをそのままストローク）
   function drawRoad() {
-    const roadW = SQ_H + GAP_Y;
+    const roadW = SQ_H + 30;
 
-    // 路の境界線（暗い大きい線）
+    // 境界影
     ctx.save();
-    ctx.lineWidth   = roadW + 14;
-    ctx.strokeStyle = '#05111c';
+    ctx.lineWidth   = roadW + 20;
+    ctx.strokeStyle = '#03090f';
     ctx.lineJoin    = 'round';
     ctx.lineCap     = 'round';
-    tracePath();
+    traceWay();
     ctx.stroke();
 
-    // 路面（少し明るい）
+    // 道路外側（暗い縁）
+    ctx.lineWidth   = roadW + 6;
+    ctx.strokeStyle = '#081828';
+    traceWay();
+    ctx.stroke();
+
+    // 道路面
     ctx.lineWidth   = roadW;
-    ctx.strokeStyle = '#0d2235';
-    tracePath();
+    ctx.strokeStyle = '#0e2438';
+    traceWay();
     ctx.stroke();
 
-    // 中心線（弱いストライプ）
+    // 道路内側の光
+    ctx.lineWidth   = roadW - 18;
+    ctx.strokeStyle = 'rgba(30,70,110,0.35)';
+    traceWay();
+    ctx.stroke();
+
+    // 中央破線
     ctx.lineWidth   = 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-    ctx.setLineDash([16, 20]);
-    tracePath();
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.setLineDash([18, 22]);
+    traceWay();
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
   }
 
-  function tracePath() {
+  function traceWay() {
     ctx.beginPath();
-    squares.forEach(({ x, y }, i) => {
-      const cx = x + SQ_W / 2, cy = y + SQ_H / 2;
-      i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
-    });
+    WAYPOINTS.forEach(([x, y], i) =>
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    );
   }
 
-  // マスの場所ごとの見た目
-  function squareFill(num) {
-    if (num === 1)      return ['#0d4a20', '#1a7a38'];   // START 緑
-    if (num === 100)   return ['#4a3800', '#7a5c00'];   // GOAL  金
-    if (num % 10 === 0) return ['#3a2600', '#5e3e00'];  // オレンジ
-    if (num % 5  === 0) return ['#122040', '#1e3868'];  // 青
-    return ['#0e2236', '#162e48'];                       // 通常
+  // マスの属性
+  function squareGrad(num, sx, sy, w, h) {
+    const g = ctx.createLinearGradient(sx, sy, sx, sy + h);
+    if (num === 1) {
+      g.addColorStop(0, '#1e8a40'); g.addColorStop(1, '#0c4a20');
+    } else if (num === 100) {
+      g.addColorStop(0, '#a07800'); g.addColorStop(1, '#5a4200');
+    } else if (num % 10 === 0) {
+      g.addColorStop(0, '#7a4a10'); g.addColorStop(1, '#3e2408');
+    } else if (num % 5 === 0) {
+      g.addColorStop(0, '#1e5888'); g.addColorStop(1, '#0e2c48');
+    } else {
+      g.addColorStop(0, '#1c3a56'); g.addColorStop(1, '#0e2030');
+    }
+    return g;
   }
   function squareBorder(num) {
-    if (num === 1)      return '#3ae070';
-    if (num === 100)   return '#ffd700';
-    if (num % 10 === 0) return '#d09040';
-    if (num % 5  === 0) return '#4890d8';
-    return '#1e4a6e';
+    if (num === 1)         return '#50f090';
+    if (num === 100)       return '#ffd700';
+    if (num % 10 === 0)    return '#e09030';
+    if (num % 5  === 0)    return '#50a0e0';
+    return '#204a6e';
   }
 
   function rr(x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);
-    ctx.arcTo(x + w, y,      x + w, y + r,      r);
+    ctx.arcTo(x+w, y,   x+w, y+r,   r);
     ctx.lineTo(x + w, y + h - r);
-    ctx.arcTo(x + w, y + h,  x + w - r, y + h,  r);
+    ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
     ctx.lineTo(x + r, y + h);
-    ctx.arcTo(x,      y + h,  x,      y + h - r, r);
-    ctx.lineTo(x,      y + r);
-    ctx.arcTo(x,      y,      x + r,  y,         r);
+    ctx.arcTo(x, y+h, x, y+h-r,     r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y,   x+r, y,       r);
     ctx.closePath();
   }
 
@@ -360,57 +418,48 @@
     const h  = isGoal ? GOAL_H : SQ_H;
     const sx = x + (SQ_W - w) / 2;
     const sy = y + (SQ_H - h) / 2;
-    const r  = 10;
 
-    const [c1, c2] = squareFill(num);
-
-    // グラデーション塗りつぶし
-    const g = ctx.createLinearGradient(sx, sy, sx, sy + h);
-    g.addColorStop(0, c2);
-    g.addColorStop(1, c1);
-
+    // 影
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.7)';
-    ctx.shadowBlur  = 10;
-    ctx.fillStyle   = g;
-    rr(sx, sy, w, h, r);
+    ctx.shadowBlur  = 8;
+    ctx.fillStyle   = squareGrad(num, sx, sy, w, h);
+    rr(sx, sy, w, h, 8);
     ctx.fill();
     ctx.restore();
 
     // 枠線
     ctx.strokeStyle = squareBorder(num);
-    ctx.lineWidth   = isGoal || isStart ? 3 : 1.5;
-    rr(sx, sy, w, h, r);
+    ctx.lineWidth   = isGoal || isStart ? 2.5 : 1.5;
+    rr(sx, sy, w, h, 8);
     ctx.stroke();
 
-    // 上辺の光沢
+    // 上辺光沢
     ctx.save();
-    ctx.globalAlpha = 0.15;
-    ctx.fillStyle   = '#ffffff';
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle   = '#fff';
     ctx.beginPath();
-    ctx.roundRect(sx + 2, sy + 2, w - 4, h * 0.4, [r, r, 0, 0]);
+    ctx.roundRect(sx+2, sy+2, w-4, h*0.38, [8,8,0,0]);
     ctx.fill();
     ctx.restore();
 
     // テキスト
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    const cx = sx + w / 2, cy = sy + h / 2;
-
+    const cx = sx + w/2, cy = sy + h/2;
     if (isGoal) {
       ctx.fillStyle = '#ffd700';
-      ctx.font      = 'bold 16px Segoe UI';
-      ctx.fillText('GOAL', cx, cy - 14);
-      ctx.font      = '26px serif';
+      ctx.font = 'bold 15px Segoe UI';
+      ctx.fillText('GOAL', cx, cy - 13);
+      ctx.font = '24px serif';
       ctx.fillText('🏆', cx, cy + 12);
     } else if (isStart) {
-      ctx.fillStyle = '#60ff90';
-      ctx.font      = 'bold 14px Segoe UI';
+      ctx.fillStyle = '#70ffa0';
+      ctx.font = 'bold 13px Segoe UI';
       ctx.fillText('START', cx, cy);
     } else {
-      const isSpecial = num % 5 === 0;
-      ctx.fillStyle = isSpecial ? '#a0d8ff' : '#6a90aa';
-      ctx.font      = isSpecial ? 'bold 14px Segoe UI' : '13px Segoe UI';
+      ctx.fillStyle = num % 5 === 0 ? '#90ccf0' : '#608098';
+      ctx.font = num % 10 === 0 ? 'bold 13px Segoe UI' : '12px Segoe UI';
       ctx.fillText(num, cx, cy);
     }
   }
@@ -422,46 +471,37 @@
       const pos = playerPositions[p.player_id] || 1;
       (byPos[pos] = byPos[pos] || []).push(p);
     });
-
     Object.entries(byPos).forEach(([posStr, group]) => {
-      const sqIdx = parseInt(posStr) - 1;
-      if (sqIdx < 0 || sqIdx >= squares.length) return;
-      const { x, y } = squares[sqIdx];
-      const cx = x + SQ_W / 2, cy = y + SQ_H / 2;
-
+      const idx = parseInt(posStr) - 1;
+      if (idx < 0 || idx >= squares.length) return;
+      const { x, y } = squares[idx];
+      const cx = x + SQ_W/2, cy = y + SQ_H/2;
       group.forEach((p, i) => {
         const off = tokenOffset(group.length, i);
         const tx = cx + off.x, ty = cy + off.y;
-        const R  = 14;
-
+        const R  = 15;
         ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.8)';
-        ctx.shadowBlur  = 8;
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur  = 10;
         ctx.beginPath();
-        ctx.arc(tx, ty, R, 0, Math.PI * 2);
+        ctx.arc(tx, ty, R, 0, Math.PI*2);
         ctx.fillStyle = p.color;
         ctx.fill();
         ctx.restore();
-
-        // トークンの光沢
-        const tg = ctx.createRadialGradient(tx - R * 0.3, ty - R * 0.3, R * 0.1, tx, ty, R);
-        tg.addColorStop(0, 'rgba(255,255,255,0.5)');
+        // 光沢
+        const tg = ctx.createRadialGradient(tx-R*.35, ty-R*.35, R*.08, tx, ty, R);
+        tg.addColorStop(0, 'rgba(255,255,255,0.55)');
         tg.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.beginPath();
-        ctx.arc(tx, ty, R, 0, Math.PI * 2);
-        ctx.fillStyle = tg;
-        ctx.fill();
-
-        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-        ctx.lineWidth   = 2;
-        ctx.beginPath();
-        ctx.arc(tx, ty, R, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.fillStyle    = '#000';
-        ctx.font         = 'bold 11px Segoe UI';
-        ctx.textAlign    = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.beginPath(); ctx.arc(tx, ty, R, 0, Math.PI*2);
+        ctx.fillStyle = tg; ctx.fill();
+        // 帯
+        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(tx, ty, R, 0, Math.PI*2); ctx.stroke();
+        // イニシャル
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 11px Segoe UI';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(p.player_name[0].toUpperCase(), tx, ty);
       });
     });
@@ -469,8 +509,8 @@
 
   function tokenOffset(total, i) {
     if (total === 1) return { x: 0, y: 0 };
-    const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
-    return { x: Math.cos(angle) * 13, y: Math.sin(angle) * 13 };
+    const a = (i / total) * Math.PI * 2 - Math.PI/2;
+    return { x: Math.cos(a)*13, y: Math.sin(a)*13 };
   }
 
 }());
