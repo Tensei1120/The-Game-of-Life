@@ -118,13 +118,20 @@
 
     try {
       const { data: existing, error: fe } = await sb
-        .from('rooms').select('id,host_id,status').eq('id', roomId).maybeSingle();
+        .from('rooms').select('id,host_id,status,created_at').eq('id', roomId).maybeSingle();
       if (fe) throw fe;
 
       let roomData = existing;
-      if (roomData?.status === 'closed') {
-        await sb.from('rooms').delete().eq('id', roomId);
-        roomData = null;
+
+      if (roomData) {
+        const isStale = roomData.status === 'closed' ||
+          (roomData.status === 'waiting' && roomData.host_id !== myId &&
+           Date.now() - new Date(roomData.created_at).getTime() > 5 * 60 * 1000);
+
+        if (isStale) {
+          await sb.from('rooms').delete().eq('id', roomId);
+          roomData = null;
+        }
       }
 
       if (!roomData) {
@@ -165,7 +172,6 @@
     }
   }
 
-  // keepalive DELETE: ページを閉じてもリクエストが完了する
   function dissolveRoom() {
     if (!isHost || !roomId) return;
     fetch(
