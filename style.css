@@ -85,6 +85,7 @@ body {
 .player-item { display:flex; align-items:center; gap:10px; padding:10px 14px; background:#f0f8ff; border:1px solid #d0e8f8; border-radius:10px; }
 .player-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
 .player-name { color:#1a3a5c; font-size:.95rem; font-weight:600; }
+.lobby-capacity { font-size:.8rem; color:#5a9acc; text-align:center; background:#e8f4ff; border:1px solid #c0d8f0; border-radius:8px; padding:6px 12px; width:100%; }
 #btn-lobby-start {
   width:100%; padding:14px; font-size:1rem; font-weight:700;
   letter-spacing:.1em; text-transform:uppercase;
@@ -134,18 +135,26 @@ body {
   border-color:#3a90e0;
   box-shadow:0 4px 20px rgba(58,144,224,.25);
 }
+.psc.psc-mine {
+  background:rgba(240,248,255,.95);
+}
 .psc-header {
   display:flex; align-items:center; gap:8px; margin-bottom:10px;
 }
 .psc-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
 .psc-name { font-weight:700; font-size:.95rem; color:#1a3a5c; flex:1; }
+.psc-self {
+  display:inline-block; font-size:.65rem; font-weight:700;
+  background:#3a90e0; color:#fff;
+  border-radius:6px; padding:1px 5px; margin-left:4px; vertical-align:middle;
+}
 .psc-job {
   font-size:.72rem; font-weight:600; padding:2px 8px;
   border-radius:10px; background:#e8f4ff; color:#3a70b0;
   border:1px solid #c0d8f0; white-space:nowrap;
 }
 .psc-stats {
-  display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;
+  display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;
 }
 .psc-stat {
   display:flex; align-items:center; gap:4px;
