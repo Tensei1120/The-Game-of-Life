@@ -1,5 +1,2 @@
-// このファイルに Supabase の認証情報を設定してください
-// Supabase ダッシュボード → Project Settings → API から取得できます
-
-const SUPABASE_URL  = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON = 'YOUR_ANON_PUBLIC_KEY';
+const SUPABASE_URL  = 'https://oigozatqqhgqumslvtph.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pZ296YXRxcWhncXVtc2x2dHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMzY2NDMsImV4cCI6MjA5NDcxMjY0M30.9F1N0n8Mi2nDt22VC66csyjLtJKgV1Kkz1k01Bdunsg';
