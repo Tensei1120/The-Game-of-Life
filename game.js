@@ -6,6 +6,8 @@
 
   const CW=1120, CH=930, SQ_W=64, SQ_H=48, GOAL_W=94, GOAL_H=70;
   const MAX_PLAYERS = 9;
+  const MAX_HAPPINESS = 20;
+  const MAX_HEALTH = 20;
   const PLAYER_COLORS = [
     '#1565c0','#c62828','#2e7d32','#e65100',
     '#6a1b9a','#00838f','#f9a825','#ad1457','#37474f'
@@ -28,7 +30,14 @@
   let currentPlayerIndex=0, turnNumber=0, isMyTurn=false, rolling=false, channel=null;
 
   function defaultStats(pos=1) {
-    return { pos, money:0, happiness:50, health:50, items:Array(6).fill(null), job:null };
+    return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH, items:Array(6).fill(null), job:null };
+  }
+  function clampStats(st) {
+    return {
+      ...st,
+      happiness: Math.max(0, Math.min(MAX_HAPPINESS, st.happiness)),
+      health:    Math.max(0, Math.min(MAX_HEALTH,    st.health)),
+    };
   }
   function getPos(d)   { return typeof d==='object'&&d!==null ? d.pos   : (d||1); }
   function getStats(d) { return typeof d==='object'&&d!==null ? d : defaultStats(d||1); }
@@ -90,7 +99,6 @@
         if(error)throw error; isHost=true;
       } else {isHost=roomData.host_id===myId;}
 
-      // 人数上限チェック
       const {data:ep}=await sb.from('room_players').select('player_id,color').eq('room_id',roomId);
       const existingPlayers=ep||[];
       const alreadyIn=existingPlayers.some(p=>p.player_id===myId);
@@ -220,8 +228,8 @@
           </div>
           <div class="psc-stats">
             <span class="psc-stat">💰 <span class="psc-stat-val">${st.money}万円</span></span>
-            <span class="psc-stat">😊 <span class="psc-stat-val">${st.happiness}</span></span>
-            <span class="psc-stat">❤️ <span class="psc-stat-val">${st.health}</span></span>
+            <span class="psc-stat">😊 <span class="psc-stat-val">${st.happiness}/${MAX_HAPPINESS}</span></span>
+            <span class="psc-stat">❤️ <span class="psc-stat-val">${st.health}/${MAX_HEALTH}</span></span>
             <span class="psc-stat">📍 <span class="psc-stat-val">${st.pos}マス</span></span>
           </div>
           <div class="psc-items">${itemsHtml}</div>
@@ -236,7 +244,7 @@
     await animateDice(roll);
     const st=getStats(playerData[myId]);
     const newPos=Math.min(st.pos+roll,100);
-    const newData={...playerData,[myId]:{...st,pos:newPos}};
+    const newData={...playerData,[myId]:clampStats({...st,pos:newPos})};
     const nextIndex=(currentPlayerIndex+1)%players.length;
     await sb.from('rooms').update({
       alive_cells:newData, current_player_index:nextIndex,
