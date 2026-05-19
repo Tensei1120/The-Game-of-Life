@@ -17,17 +17,22 @@
   <!-- あいことば入力画面 -->
   <div id="word-screen" class="hidden">
     <div class="word-card">
-      <p class="word-label">あいことばを入力してください</p>
-      <input
-        id="word-input"
-        type="text"
-        maxlength="20"
-        placeholder="あいことば"
-        autocomplete="off"
-        spellcheck="false"
-      >
+      <p class="word-label">名前とあいことばを入力</p>
+      <input id="name-input" type="text" maxlength="10" placeholder="あなたの名前" autocomplete="off">
+      <input id="word-input" type="text" maxlength="20" placeholder="あいことば" autocomplete="off" spellcheck="false">
       <p id="word-error" class="word-error"></p>
-      <button id="btn-create">ルームを作成する</button>
+      <button id="btn-create">ルームに入る</button>
+    </div>
+  </div>
+
+  <!-- 待機室 -->
+  <div id="lobby-screen" class="hidden">
+    <div class="lobby-card">
+      <h2 id="lobby-room-name"></h2>
+      <p class="lobby-subtitle">参加者</p>
+      <ul id="player-list"></ul>
+      <button id="btn-lobby-start">ゲーム開始</button>
+      <p id="lobby-hint" class="hint">ホストがゲームを開始するまでお待ちください</p>
     </div>
   </div>
 
@@ -39,39 +44,29 @@
         <span id="room-badge"></span>
       </div>
 
+      <div class="turn-info">
+        <div id="turn-indicator">-</div>
+        <div id="cells-remaining"></div>
+      </div>
+
+      <div class="canvas-wrapper">
+        <canvas id="canvas"></canvas>
+        <div id="sim-overlay" class="hidden">シミュレーション中...</div>
+      </div>
+
+      <button id="btn-done">ターン終了</button>
+
+      <ul id="game-player-list"></ul>
+
       <div class="stats">
-        <span>世代: <strong id="generation">0</strong></span>
+        <span>ターン: <strong id="turn-number">0</strong></span>
         <span>生存セル: <strong id="population">0</strong></span>
       </div>
-
-      <canvas id="canvas"></canvas>
-
-      <div class="controls">
-        <button id="btn-start">▶ 開始</button>
-        <button id="btn-step">⏭ 1ステップ</button>
-        <button id="btn-random">🎲 ランダム</button>
-        <button id="btn-clear">🗑 クリア</button>
-      </div>
-
-      <div class="speed-control">
-        <label>速度:
-          <input type="range" id="speed" min="1" max="30" value="10">
-          <span id="speed-label">10 fps</span>
-        </label>
-      </div>
-
-      <div class="presets">
-        <span>プリセット:</span>
-        <button class="preset-btn" data-preset="glider">グライダー</button>
-        <button class="preset-btn" data-preset="blinker">ブリンカー</button>
-        <button class="preset-btn" data-preset="pulsar">パルサー</button>
-        <button class="preset-btn" data-preset="gosper">ゴスパー銃</button>
-      </div>
-
-      <p class="hint">クリックまたはドラッグでセルを描けます</p>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
