@@ -5,13 +5,82 @@
 }
 
 body {
-  background: #1a1a2e;
+  background: #0d1b2a;
   color: #e0e0e0;
   font-family: 'Segoe UI', sans-serif;
+  min-height: 100vh;
+}
+
+/* =====================
+   タイトル画面
+===================== */
+#title-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 60px;
+  transition: opacity 0.6s ease;
+}
+
+#title-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#title-text {
+  font-size: clamp(2.4rem, 8vw, 5rem);
+  font-weight: 900;
+  color: #a0d8ef;
+  text-align: center;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-shadow: 0 0 30px rgba(160, 216, 239, 0.4);
+}
+
+#btn-go {
+  padding: 18px 64px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  border: none;
+  border-radius: 50px;
+  background: #a0d8ef;
+  color: #0d1b2a;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  box-shadow: 0 0 24px rgba(160, 216, 239, 0.5);
+}
+
+#btn-go:hover {
+  background: #c8eaf8;
+  transform: scale(1.06);
+  box-shadow: 0 0 40px rgba(160, 216, 239, 0.7);
+}
+
+#btn-go:active {
+  transform: scale(0.98);
+}
+
+/* =====================
+   ゲーム画面
+===================== */
+#game-screen {
   display: flex;
   justify-content: center;
   min-height: 100vh;
   padding: 20px;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+#game-screen.hidden {
+  display: none;
+}
+
+#game-screen.visible {
+  opacity: 1;
 }
 
 .container {
@@ -23,8 +92,9 @@ body {
   max-width: 900px;
 }
 
-h1 {
-  font-size: 2rem;
+h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
   color: #a0d8ef;
   text-align: center;
   letter-spacing: 0.05em;

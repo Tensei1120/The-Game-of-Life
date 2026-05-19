@@ -3,43 +3,53 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Game of Life</title>
+  <title>モバイル人生ゲーム</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Conway's Game of Life</h1>
 
-    <div class="stats">
-      <span>世代: <strong id="generation">0</strong></span>
-      <span>生存セル: <strong id="population">0</strong></span>
+  <!-- タイトル画面 -->
+  <div id="title-screen">
+    <h1 id="title-text">モバイル人生ゲーム</h1>
+    <button id="btn-go">START</button>
+  </div>
+
+  <!-- ゲーム画面 -->
+  <div id="game-screen" class="hidden">
+    <div class="container">
+      <h2>モバイル人生ゲーム</h2>
+
+      <div class="stats">
+        <span>世代: <strong id="generation">0</strong></span>
+        <span>生存セル: <strong id="population">0</strong></span>
+      </div>
+
+      <canvas id="canvas"></canvas>
+
+      <div class="controls">
+        <button id="btn-start">▶ 開始</button>
+        <button id="btn-step">⏭ 1ステップ</button>
+        <button id="btn-random">🎲 ランダム</button>
+        <button id="btn-clear">🗑 クリア</button>
+      </div>
+
+      <div class="speed-control">
+        <label>速度:
+          <input type="range" id="speed" min="1" max="30" value="10">
+          <span id="speed-label">10 fps</span>
+        </label>
+      </div>
+
+      <div class="presets">
+        <span>プリセット:</span>
+        <button class="preset-btn" data-preset="glider">グライダー</button>
+        <button class="preset-btn" data-preset="blinker">ブリンカー</button>
+        <button class="preset-btn" data-preset="pulsar">パルサー</button>
+        <button class="preset-btn" data-preset="gosper">ゴスパー銃</button>
+      </div>
+
+      <p class="hint">クリックまたはドラッグでセルを描けます</p>
     </div>
-
-    <canvas id="canvas"></canvas>
-
-    <div class="controls">
-      <button id="btn-start">▶ 開始</button>
-      <button id="btn-step">⏭ 1ステップ</button>
-      <button id="btn-random">🎲 ランダム</button>
-      <button id="btn-clear">🗑 クリア</button>
-    </div>
-
-    <div class="speed-control">
-      <label>速度:
-        <input type="range" id="speed" min="1" max="30" value="10">
-        <span id="speed-label">10 fps</span>
-      </label>
-    </div>
-
-    <div class="presets">
-      <span>プリセット:</span>
-      <button class="preset-btn" data-preset="glider">グライダー</button>
-      <button class="preset-btn" data-preset="blinker">ブリンカー</button>
-      <button class="preset-btn" data-preset="pulsar">パルサー</button>
-      <button class="preset-btn" data-preset="gosper">ゴスパー銃</button>
-    </div>
-
-    <p class="hint">クリックまたはドラッグでセルを描けます</p>
   </div>
 
   <script src="game.js"></script>
