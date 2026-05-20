@@ -4,7 +4,10 @@
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
-  const CW=1120, CH=930, SQ_W=64, SQ_H=48, GOAL_W=94, GOAL_H=70, STOP_W=82, STOP_H=62;
+  const CW=1120, CH=930;
+  const SQ_ACROSS = 52;
+  let SQ_ALONG = 36;
+  let ROAD_W = 74;
   const MAX_PLAYERS = 9;
   const MAX_HAPPINESS = 20;
   const MAX_HEALTH = 20;
@@ -53,49 +56,89 @@
   const squares = buildSquares();
 
   function buildSquares() {
-    const segLens=[]; let total=0;
-    for (let i=1;i<WAYPOINTS.length;i++) {
-      const dx=WAYPOINTS[i][0]-WAYPOINTS[i-1][0], dy=WAYPOINTS[i][1]-WAYPOINTS[i-1][1];
-      const len=Math.sqrt(dx*dx+dy*dy); segLens.push(len); total+=len;
+    const segLens = []; let total = 0;
+    for (let i = 1; i < WAYPOINTS.length; i++) {
+      const dx = WAYPOINTS[i][0]-WAYPOINTS[i-1][0], dy = WAYPOINTS[i][1]-WAYPOINTS[i-1][1];
+      const len = Math.sqrt(dx*dx + dy*dy);
+      segLens.push(len); total += len;
     }
-    const spacing=total/99, sqs=[];
-    for (let n=0;n<100;n++) {
-      const target=n*spacing; let traveled=0, seg=0;
-      while (seg<segLens.length-1&&traveled+segLens[seg]<target) traveled+=segLens[seg++];
-      const t=segLens[seg]>0?Math.min((target-traveled)/segLens[seg],1):0;
-      const p0=WAYPOINTS[seg], p1=WAYPOINTS[Math.min(seg+1,WAYPOINTS.length-1)];
-      sqs.push({num:n+1, x:p0[0]+(p1[0]-p0[0])*t-SQ_W/2, y:p0[1]+(p1[1]-p0[1])*t-SQ_H/2});
+    SQ_ALONG = (total / 99) * 0.82;
+    ROAD_W = SQ_ACROSS + 22;
+
+    const spacing = total / 99;
+    const sqs = [];
+    for (let n = 0; n < 100; n++) {
+      const target = n * spacing;
+      let traveled = 0, seg = 0;
+      while (seg < segLens.length-1 && traveled + segLens[seg] < target) traveled += segLens[seg++];
+      const t = segLens[seg] > 0 ? Math.min((target - traveled) / segLens[seg], 1) : 0;
+      const p0 = WAYPOINTS[seg], p1 = WAYPOINTS[Math.min(seg+1, WAYPOINTS.length-1)];
+      const cx = p0[0] + (p1[0]-p0[0]) * t;
+      const cy = p0[1] + (p1[1]-p0[1]) * t;
+      const angle = Math.atan2(p1[1]-p0[1], p1[0]-p0[0]);
+      sqs.push({ num: n+1, cx, cy, angle });
     }
     return sqs;
   }
 
   // 分岐マス生成
-  // job: メインロードの既存マス位置をそのまま使用
-  // uni: sq20→sq30を左側へ大きくカーブさせたベジェ曲線
+  // job: メインロードの既存マス位置
+  // uni: 左側へカーブするベジェ曲線（弧長パラメータ化）
   const branchSquares = (function() {
     const sq20 = squares[BRANCH_START - 1];
     const sq30 = squares[BRANCH_END - 1];
-    const cx20 = sq20.x + SQ_W/2, cy20 = sq20.y + SQ_H/2;
-    const cx30 = sq30.x + SQ_W/2, cy30 = sq30.y + SQ_H/2;
+    const cx20 = sq20.cx, cy20 = sq20.cy;
+    const cx30 = sq30.cx, cy30 = sq30.cy;
 
-    // 就職ルート: メインロードのマス21〜29をそのまま利用
-    const job = [];
-    for (let i = 1; i < BRANCH_END - BRANCH_START; i++) {
-      const sq = squares[BRANCH_START + i - 1];
-      job.push({ num: BRANCH_START + i, x: sq.x, y: sq.y, route: 'job' });
-    }
+    // 就職ルート: メインロードのマス21〜29
+    const job = squares.slice(BRANCH_START, BRANCH_END - 1).map(sq => ({ ...sq, route: 'job' }));
 
-    // 大学ルート: 左側へカーブする二次ベジェ曲線
-    // 制御点: sq20とsq30の中点より左に大きく引っ張る
+    // 大学ルート: 左側へカーブする二次ベジェ曲線（弧長パラメータ化）
     const cpx = (cx20 + cx30) / 2 - Math.abs(cy20 - cy30) * 1.4;
     const cpy = (cy20 + cy30) / 2 + (cy20 - cy30) * 0.1;
+
+    function bezierPt(t) {
+      return {
+        x: (1-t)*(1-t)*cx20 + 2*(1-t)*t*cpx + t*t*cx30,
+        y: (1-t)*(1-t)*cy20 + 2*(1-t)*t*cpy + t*t*cy30
+      };
+    }
+
+    // 弧長テーブル構築
+    const SAMPLES = 600;
+    const arcSamples = [{ t: 0, len: 0 }];
+    let arcTotal = 0;
+    for (let i = 1; i <= SAMPLES; i++) {
+      const t0 = (i-1) / SAMPLES, t1 = i / SAMPLES;
+      const p0 = bezierPt(t0), p1 = bezierPt(t1);
+      arcTotal += Math.sqrt((p1.x-p0.x)**2 + (p1.y-p0.y)**2);
+      arcSamples.push({ t: t1, len: arcTotal });
+    }
+
+    function tAtLen(targetLen) {
+      let lo = 0, hi = arcSamples.length - 1;
+      while (lo < hi - 1) {
+        const mid = (lo + hi) >> 1;
+        if (arcSamples[mid].len < targetLen) lo = mid; else hi = mid;
+      }
+      const a = arcSamples[lo], b = arcSamples[hi];
+      if (b.len === a.len) return a.t;
+      return a.t + (b.t - a.t) * (targetLen - a.len) / (b.len - a.len);
+    }
+
     const steps = BRANCH_END - BRANCH_START;
+    const uniSpacing = arcTotal / steps;
     const uni = [];
     for (let i = 1; i < steps; i++) {
-      const t = i / steps;
-      const bx = (1-t)*(1-t)*cx20 + 2*(1-t)*t*cpx + t*t*cx30;
-      const by = (1-t)*(1-t)*cy20 + 2*(1-t)*t*cpy + t*t*cy30;
-      uni.push({ num: BRANCH_START + i, x: bx - SQ_W/2, y: by - SQ_H/2, route: 'uni' });
+      const t = tAtLen(i * uniSpacing);
+      const { x: bx, y: by } = bezierPt(t);
+      const t2 = Math.min(t + 0.002, 1);
+      const { x: bx2, y: by2 } = bezierPt(t2);
+      uni.push({
+        num: BRANCH_START + i, cx: bx, cy: by,
+        angle: Math.atan2(by2 - by, bx2 - bx),
+        route: 'uni'
+      });
     }
 
     return { job, uni, cpx, cpy, cx20, cy20, cx30, cy30 };
@@ -342,8 +385,8 @@
   // ── ボード描画 ──
   function drawBoard(){
     drawSky(); drawMountains();
-    drawUniBranchRoad(); // 大学ルートを先に描画（メインロードの下に来る）
-    drawRoad();          // メインロード（就職ルート区間を含む）
+    drawUniBranchRoad();
+    drawRoad();
     drawBranchLabels();
     squares.forEach(sq => {
       if (sq.num > BRANCH_START && sq.num < BRANCH_END) return;
@@ -357,17 +400,16 @@
   // 大学ルート専用道路（ベジェ曲線）
   function drawUniBranchRoad(){
     const {cpx, cpy, cx20, cy20, cx30, cy30} = branchSquares;
-    const roadW = SQ_H + 30;
     ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
     function bezier(){
       ctx.beginPath();
       ctx.moveTo(cx20, cy20);
       ctx.quadraticCurveTo(cpx, cpy, cx30, cy30);
     }
-    ctx.lineWidth=roadW+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; bezier(); ctx.stroke();
-    ctx.lineWidth=roadW+4;  ctx.strokeStyle='#c8a060';              bezier(); ctx.stroke();
-    ctx.lineWidth=roadW;    ctx.strokeStyle='#ddb870';              bezier(); ctx.stroke();
-    ctx.lineWidth=roadW-14; ctx.strokeStyle='rgba(255,235,180,0.35)'; bezier(); ctx.stroke();
+    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; bezier(); ctx.stroke();
+    ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#c8a060';              bezier(); ctx.stroke();
+    ctx.lineWidth=ROAD_W;    ctx.strokeStyle='#ddb870';              bezier(); ctx.stroke();
+    ctx.lineWidth=ROAD_W-14; ctx.strokeStyle='rgba(255,235,180,0.35)'; bezier(); ctx.stroke();
     ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.setLineDash([18,22]);
     bezier(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
@@ -375,33 +417,39 @@
 
   // 分岐ルートのラベル表示
   function drawBranchLabels(){
-    const j0 = branchSquares.job[4]; // 就職ルートの中間あたり
-    const u0 = branchSquares.uni[4]; // 大学ルートの中間あたり
+    const j0 = branchSquares.job[4];
+    const u0 = branchSquares.uni[4];
+    if (!j0 || !u0) return;
     ctx.save();
     ctx.font='bold 12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    // 就職ルートラベル（メインロード上）
-    const jx=j0.x+SQ_W/2, jy=j0.y-18;
+    const jx = j0.cx, jy = j0.cy - 22;
     ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(jx-46,jy-10,92,20,6); ctx.fill();
     ctx.fillStyle='#b05010'; ctx.fillText('💼 就職ルート', jx, jy);
-    // 大学ルートラベル
-    const ux=u0.x+SQ_W/2, uy=u0.y-18;
+    const ux = u0.cx, uy = u0.cy - 22;
     ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
     ctx.fillStyle='#1030b0'; ctx.fillText('🎓 大学ルート', ux, uy);
     ctx.restore();
   }
 
-  function drawBranchSquare({num, x, y, route}){
+  function drawBranchSquare({num, cx, cy, angle, route}){
+    const w = SQ_ALONG, h = SQ_ACROSS;
     ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(angle);
     ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
-    const g = ctx.createLinearGradient(x, y, x, y+SQ_H);
+    const g = ctx.createLinearGradient(0, -h/2, 0, h/2);
     if (route==='job') { g.addColorStop(0,'#fff3d8'); g.addColorStop(1,'#f0c870'); }
     else               { g.addColorStop(0,'#e4eaff'); g.addColorStop(1,'#a0b8f8'); }
-    ctx.fillStyle=g; rr(x,y,SQ_W,SQ_H,6); ctx.fill(); ctx.restore();
-    ctx.strokeStyle=route==='job'?'#c06810':'#2840b8'; ctx.lineWidth=1.5;
-    rr(x,y,SQ_W,SQ_H,6); ctx.stroke();
-    ctx.fillStyle=route==='job'?'#904010':'#1830a0';
+    ctx.fillStyle = g;
+    rr(-w/2, -h/2, w, h, 6); ctx.fill();
+    ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0;
+    ctx.strokeStyle = route==='job' ? '#c06810' : '#2840b8';
+    ctx.lineWidth = 1.5;
+    rr(-w/2, -h/2, w, h, 6); ctx.stroke();
+    ctx.rotate(-angle);
+    ctx.fillStyle = route==='job' ? '#904010' : '#1830a0';
     ctx.font='11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(num, x+SQ_W/2, y+SQ_H/2);
+    ctx.fillText(num, 0, 0);
+    ctx.restore();
   }
 
   function drawSky(){
@@ -444,20 +492,19 @@
     drawMountainLayer([[0,760],[140,730],[300,748],[480,725],[640,740],[800,722],[960,738],[1120,750]],'#5a9040');
   }
   function drawRoad(){
-    const roadW=SQ_H+30;
     ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
-    ctx.lineWidth=roadW+14;ctx.strokeStyle='rgba(100,70,30,0.35)';traceWay();ctx.stroke();
-    ctx.lineWidth=roadW+4;ctx.strokeStyle='#c8a060';traceWay();ctx.stroke();
-    ctx.lineWidth=roadW;ctx.strokeStyle='#ddb870';traceWay();ctx.stroke();
-    ctx.lineWidth=roadW-14;ctx.strokeStyle='rgba(255,235,180,0.35)';traceWay();ctx.stroke();
-    ctx.lineWidth=2;ctx.strokeStyle='rgba(255,255,255,0.55)';
-    ctx.setLineDash([18,22]);traceWay();ctx.stroke();ctx.setLineDash([]);
+    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; traceWay(); ctx.stroke();
+    ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#c8a060';              traceWay(); ctx.stroke();
+    ctx.lineWidth=ROAD_W;    ctx.strokeStyle='#ddb870';              traceWay(); ctx.stroke();
+    ctx.lineWidth=ROAD_W-14; ctx.strokeStyle='rgba(255,235,180,0.35)'; traceWay(); ctx.stroke();
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)';
+    ctx.setLineDash([18,22]); traceWay(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
   function traceWay(){ctx.beginPath();WAYPOINTS.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));}
 
-  function squareGrad(num,sx,sy,w,h){
-    const g=ctx.createLinearGradient(sx,sy,sx,sy+h);
+  function squareGrad(num, h){
+    const g = ctx.createLinearGradient(0, -h/2, 0, h/2);
     if(num===1)                        {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
     else if(num===100)                 {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
     else if(FORCED_STOPS.includes(num)){g.addColorStop(0,'#ffe0e0');g.addColorStop(1,'#f08888');}
@@ -478,32 +525,44 @@
     ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);
     ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
   }
-  function drawSquare({num,x,y}){
-    const isGoal=num===100, isStart=num===1, isStop=FORCED_STOPS.includes(num);
-    const w = isGoal?GOAL_W : isStop?STOP_W : SQ_W;
-    const h = isGoal?GOAL_H : isStop?STOP_H : SQ_H;
-    const sx=x+(SQ_W-w)/2, sy=y+(SQ_H-h)/2;
-    ctx.save();ctx.shadowColor='rgba(0,0,0,0.18)';ctx.shadowBlur=6;ctx.shadowOffsetY=2;
-    ctx.fillStyle=squareGrad(num,sx,sy,w,h);rr(sx,sy,w,h,6);ctx.fill();ctx.restore();
-    ctx.strokeStyle=squareBorder(num);ctx.lineWidth=isGoal||isStart||isStop?2.5:1.5;
-    rr(sx,sy,w,h,6);ctx.stroke();
-    ctx.save();ctx.globalAlpha=0.4;ctx.fillStyle='rgba(255,255,255,0.8)';
-    ctx.beginPath();ctx.roundRect(sx+2,sy+2,w-4,h*.35,[6,6,0,0]);ctx.fill();ctx.restore();
-    ctx.textAlign='center';ctx.textBaseline='middle';
-    const cx=sx+w/2, cy=sy+h/2;
+
+  function drawSquare({num, cx, cy, angle}){
+    const isGoal = num===100, isStart = num===1, isStop = FORCED_STOPS.includes(num);
+    const w = isGoal ? SQ_ALONG*1.4 : SQ_ALONG;
+    const h = isGoal ? SQ_ACROSS*1.5 : isStop ? SQ_ACROSS*1.35 : SQ_ACROSS;
+
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(angle);
+    ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
+    ctx.fillStyle = squareGrad(num, h);
+    rr(-w/2, -h/2, w, h, 6); ctx.fill();
+
+    ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0;
+    ctx.strokeStyle = squareBorder(num);
+    ctx.lineWidth = isGoal||isStart||isStop ? 2.5 : 1.5;
+    rr(-w/2, -h/2, w, h, 6); ctx.stroke();
+
+    ctx.save();
+    ctx.globalAlpha=0.4; ctx.fillStyle='rgba(255,255,255,0.8)';
+    ctx.beginPath(); ctx.roundRect(-w/2+2, -h/2+2, w-4, h*0.35, [6,6,0,0]); ctx.fill();
+    ctx.restore();
+
+    ctx.rotate(-angle);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
     if(isGoal){
-      ctx.fillStyle='#8a6000';ctx.font='bold 14px Segoe UI';ctx.fillText('GOAL',cx,cy-12);
-      ctx.font='22px serif';ctx.fillText('🏆',cx,cy+10);
+      ctx.fillStyle='#8a6000'; ctx.font='bold 14px Segoe UI'; ctx.fillText('GOAL', 0, -10);
+      ctx.font='20px serif'; ctx.fillText('🏆', 0, 10);
     } else if(isStart){
-      ctx.fillStyle='#1a6030';ctx.font='bold 12px Segoe UI';ctx.fillText('START',cx,cy);
+      ctx.fillStyle='#1a6030'; ctx.font='bold 12px Segoe UI'; ctx.fillText('START', 0, 0);
     } else if(isStop){
-      ctx.fillStyle='#a00000';ctx.font='bold 12px Segoe UI';ctx.fillText('★STOP',cx,cy-9);
-      ctx.font='bold 11px Segoe UI';ctx.fillText(num,cx,cy+9);
+      ctx.fillStyle='#a00000'; ctx.font='bold 11px Segoe UI'; ctx.fillText('★STOP', 0, -6);
+      ctx.font='bold 10px Segoe UI'; ctx.fillText(num, 0, 7);
     } else {
-      ctx.fillStyle=num%10===0?'#c05010':num%5===0?'#1a60a0':'#7a6040';
-      ctx.font=num%10===0?'bold 12px Segoe UI':'11px Segoe UI';
-      ctx.fillText(num,cx,cy);
+      ctx.fillStyle = num%10===0?'#c05010': num%5===0?'#1a60a0': '#7a6040';
+      ctx.font = num%10===0?'bold 12px Segoe UI': '11px Segoe UI';
+      ctx.fillText(num, 0, 0);
     }
+    ctx.restore();
   }
 
   function drawTokens(){
@@ -518,7 +577,7 @@
     });
     Object.values(byKey).forEach(group=>{
       const {sq}=group[0];
-      const cx=sq.x+SQ_W/2, cy=sq.y+SQ_H/2;
+      const cx=sq.cx, cy=sq.cy;
       group.forEach(({p},i)=>{
         const off=tokenOffset(group.length,i),tx=cx+off.x,ty=cy+off.y,R=14;
         ctx.save();ctx.shadowColor='rgba(0,0,0,0.4)';ctx.shadowBlur=8;ctx.shadowOffsetY=3;
