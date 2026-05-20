@@ -6,7 +6,7 @@
 
   const CW=1120, CH=930;
   const SQ_ACROSS = 52;
-  let SQ_ALONG = 36;
+  let SQ_ALONG = 44;  // average, set in buildSquares
   let ROAD_W = 74;
   const MAX_PLAYERS = 9;
   const MAX_HAPPINESS = 20;
@@ -56,44 +56,55 @@
   const squares = buildSquares();
 
   function buildSquares() {
+    // セグメント長と総距離を計算
     const segLens = []; let total = 0;
     for (let i = 1; i < WAYPOINTS.length; i++) {
       const dx = WAYPOINTS[i][0]-WAYPOINTS[i-1][0], dy = WAYPOINTS[i][1]-WAYPOINTS[i-1][1];
       const len = Math.sqrt(dx*dx + dy*dy);
       segLens.push(len); total += len;
     }
-    SQ_ALONG = (total / 99) * 0.82;
     ROAD_W = SQ_ACROSS + 22;
+    SQ_ALONG = total / 99; // 平均スペーシング（分岐マス用）
 
     const spacing = total / 99;
-    const sqs = [];
+
+    // 第1パス: 各マスの中心座標と角度を計算
+    const pts = [];
     for (let n = 0; n < 100; n++) {
       const target = n * spacing;
       let traveled = 0, seg = 0;
       while (seg < segLens.length-1 && traveled + segLens[seg] < target) traveled += segLens[seg++];
       const t = segLens[seg] > 0 ? Math.min((target - traveled) / segLens[seg], 1) : 0;
       const p0 = WAYPOINTS[seg], p1 = WAYPOINTS[Math.min(seg+1, WAYPOINTS.length-1)];
-      const cx = p0[0] + (p1[0]-p0[0]) * t;
-      const cy = p0[1] + (p1[1]-p0[1]) * t;
-      const angle = Math.atan2(p1[1]-p0[1], p1[0]-p0[0]);
-      sqs.push({ num: n+1, cx, cy, angle });
+      pts.push({
+        cx: p0[0] + (p1[0]-p0[0]) * t,
+        cy: p0[1] + (p1[1]-p0[1]) * t,
+        angle: Math.atan2(p1[1]-p0[1], p1[0]-p0[0])
+      });
+    }
+
+    // 第2パス: 隣接中心点の中間を境界として各マスの幅を計算
+    function dist(a, b) { return Math.sqrt((a.cx-b.cx)**2 + (a.cy-b.cy)**2); }
+    const sqs = [];
+    for (let n = 0; n < 100; n++) {
+      const leftDist  = n === 0  ? 0 : dist(pts[n-1], pts[n]) / 2;
+      const rightDist = n === 99 ? 0 : dist(pts[n], pts[n+1]) / 2;
+      sqs.push({ num: n+1, cx: pts[n].cx, cy: pts[n].cy, angle: pts[n].angle, w: leftDist + rightDist });
     }
     return sqs;
   }
 
   // 分岐マス生成
-  // job: メインロードの既存マス位置
-  // uni: 左側へカーブするベジェ曲線（弧長パラメータ化）
   const branchSquares = (function() {
     const sq20 = squares[BRANCH_START - 1];
     const sq30 = squares[BRANCH_END - 1];
     const cx20 = sq20.cx, cy20 = sq20.cy;
     const cx30 = sq30.cx, cy30 = sq30.cy;
 
-    // 就職ルート: メインロードのマス21〜29
+    // 就職ルート: メインロードのマス21〜29（中間点境界の幅をそのまま使用）
     const job = squares.slice(BRANCH_START, BRANCH_END - 1).map(sq => ({ ...sq, route: 'job' }));
 
-    // 大学ルート: 左側へカーブする二次ベジェ曲線（弧長パラメータ化）
+    // 大学ルート: 左側へカーブする二次ベジェ（弧長パラメータ化）
     const cpx = (cx20 + cx30) / 2 - Math.abs(cy20 - cy30) * 1.4;
     const cpy = (cy20 + cy30) / 2 + (cy20 - cy30) * 0.1;
 
@@ -114,7 +125,6 @@
       arcTotal += Math.sqrt((p1.x-p0.x)**2 + (p1.y-p0.y)**2);
       arcSamples.push({ t: t1, len: arcTotal });
     }
-
     function tAtLen(targetLen) {
       let lo = 0, hi = arcSamples.length - 1;
       while (lo < hi - 1) {
@@ -128,15 +138,30 @@
 
     const steps = BRANCH_END - BRANCH_START;
     const uniSpacing = arcTotal / steps;
+
+    // 大学ルートの全点列（sq20 + 中間9点 + sq30）を構築
+    const allUniPts = [{ cx: cx20, cy: cy20 }];
+    for (let i = 1; i < steps; i++) {
+      const t  = tAtLen(i * uniSpacing);
+      const pt = bezierPt(t);
+      const t2 = Math.min(t + 0.002, 1);
+      const pt2 = bezierPt(t2);
+      allUniPts.push({ cx: pt.x, cy: pt.y, angle: Math.atan2(pt2.y-pt.y, pt2.x-pt.x) });
+    }
+    allUniPts.push({ cx: cx30, cy: cy30 });
+
+    // 中間点境界で幅を計算
+    function dist(a, b) { return Math.sqrt((a.cx-b.cx)**2 + (a.cy-b.cy)**2); }
     const uni = [];
     for (let i = 1; i < steps; i++) {
-      const t = tAtLen(i * uniSpacing);
-      const { x: bx, y: by } = bezierPt(t);
-      const t2 = Math.min(t + 0.002, 1);
-      const { x: bx2, y: by2 } = bezierPt(t2);
+      const pt = allUniPts[i];
+      const leftDist  = dist(allUniPts[i-1], pt) / 2;
+      const rightDist = dist(pt, allUniPts[i+1]) / 2;
       uni.push({
-        num: BRANCH_START + i, cx: bx, cy: by,
-        angle: Math.atan2(by2 - by, bx2 - bx),
+        num: BRANCH_START + i,
+        cx: pt.cx, cy: pt.cy,
+        angle: pt.angle,
+        w: leftDist + rightDist,
         route: 'uni'
       });
     }
@@ -397,13 +422,11 @@
     drawTokens();
   }
 
-  // 大学ルート専用道路（ベジェ曲線）
   function drawUniBranchRoad(){
     const {cpx, cpy, cx20, cy20, cx30, cy30} = branchSquares;
     ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
     function bezier(){
-      ctx.beginPath();
-      ctx.moveTo(cx20, cy20);
+      ctx.beginPath(); ctx.moveTo(cx20, cy20);
       ctx.quadraticCurveTo(cpx, cpy, cx30, cy30);
     }
     ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; bezier(); ctx.stroke();
@@ -415,24 +438,23 @@
     ctx.restore();
   }
 
-  // 分岐ルートのラベル表示
   function drawBranchLabels(){
     const j0 = branchSquares.job[4];
     const u0 = branchSquares.uni[4];
     if (!j0 || !u0) return;
     ctx.save();
     ctx.font='bold 12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    const jx = j0.cx, jy = j0.cy - 22;
+    const jx = j0.cx, jy = j0.cy - 24;
     ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(jx-46,jy-10,92,20,6); ctx.fill();
     ctx.fillStyle='#b05010'; ctx.fillText('💼 就職ルート', jx, jy);
-    const ux = u0.cx, uy = u0.cy - 22;
+    const ux = u0.cx, uy = u0.cy - 24;
     ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
     ctx.fillStyle='#1030b0'; ctx.fillText('🎓 大学ルート', ux, uy);
     ctx.restore();
   }
 
-  function drawBranchSquare({num, cx, cy, angle, route}){
-    const w = SQ_ALONG, h = SQ_ACROSS;
+  function drawBranchSquare({num, cx, cy, angle, w, route}){
+    const h = SQ_ACROSS;
     ctx.save();
     ctx.translate(cx, cy); ctx.rotate(angle);
     ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
@@ -440,11 +462,11 @@
     if (route==='job') { g.addColorStop(0,'#fff3d8'); g.addColorStop(1,'#f0c870'); }
     else               { g.addColorStop(0,'#e4eaff'); g.addColorStop(1,'#a0b8f8'); }
     ctx.fillStyle = g;
-    rr(-w/2, -h/2, w, h, 6); ctx.fill();
+    rr(-w/2, -h/2, w, h, 5); ctx.fill();
     ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0;
     ctx.strokeStyle = route==='job' ? '#c06810' : '#2840b8';
     ctx.lineWidth = 1.5;
-    rr(-w/2, -h/2, w, h, 6); ctx.stroke();
+    rr(-w/2, -h/2, w, h, 5); ctx.stroke();
     ctx.rotate(-angle);
     ctx.fillStyle = route==='job' ? '#904010' : '#1830a0';
     ctx.font='11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -526,36 +548,37 @@
     ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
   }
 
-  function drawSquare({num, cx, cy, angle}){
+  function drawSquare({num, cx, cy, angle, w}){
     const isGoal = num===100, isStart = num===1, isStop = FORCED_STOPS.includes(num);
-    const w = isGoal ? SQ_ALONG*1.4 : SQ_ALONG;
-    const h = isGoal ? SQ_ACROSS*1.5 : isStop ? SQ_ACROSS*1.35 : SQ_ACROSS;
+    // 高さのみ特殊マスで変化、幅はパス区間幅そのまま（隣接のため）
+    const sqW = isGoal ? w * 1.0 : w;
+    const h = isGoal ? SQ_ACROSS * 1.5 : isStop ? SQ_ACROSS * 1.35 : SQ_ACROSS;
 
     ctx.save();
     ctx.translate(cx, cy); ctx.rotate(angle);
     ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
     ctx.fillStyle = squareGrad(num, h);
-    rr(-w/2, -h/2, w, h, 6); ctx.fill();
+    rr(-sqW/2, -h/2, sqW, h, 5); ctx.fill();
 
     ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0;
     ctx.strokeStyle = squareBorder(num);
     ctx.lineWidth = isGoal||isStart||isStop ? 2.5 : 1.5;
-    rr(-w/2, -h/2, w, h, 6); ctx.stroke();
+    rr(-sqW/2, -h/2, sqW, h, 5); ctx.stroke();
 
     ctx.save();
-    ctx.globalAlpha=0.4; ctx.fillStyle='rgba(255,255,255,0.8)';
-    ctx.beginPath(); ctx.roundRect(-w/2+2, -h/2+2, w-4, h*0.35, [6,6,0,0]); ctx.fill();
+    ctx.globalAlpha=0.35; ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.roundRect(-sqW/2+2, -h/2+2, sqW-4, h*0.35, [5,5,0,0]); ctx.fill();
     ctx.restore();
 
     ctx.rotate(-angle);
     ctx.textAlign='center'; ctx.textBaseline='middle';
     if(isGoal){
-      ctx.fillStyle='#8a6000'; ctx.font='bold 14px Segoe UI'; ctx.fillText('GOAL', 0, -10);
-      ctx.font='20px serif'; ctx.fillText('🏆', 0, 10);
+      ctx.fillStyle='#8a6000'; ctx.font='bold 13px Segoe UI'; ctx.fillText('GOAL', 0, -9);
+      ctx.font='18px serif'; ctx.fillText('🏆', 0, 9);
     } else if(isStart){
-      ctx.fillStyle='#1a6030'; ctx.font='bold 12px Segoe UI'; ctx.fillText('START', 0, 0);
+      ctx.fillStyle='#1a6030'; ctx.font='bold 11px Segoe UI'; ctx.fillText('START', 0, 0);
     } else if(isStop){
-      ctx.fillStyle='#a00000'; ctx.font='bold 11px Segoe UI'; ctx.fillText('★STOP', 0, -6);
+      ctx.fillStyle='#a00000'; ctx.font='bold 10px Segoe UI'; ctx.fillText('★STOP', 0, -6);
       ctx.font='bold 10px Segoe UI'; ctx.fillText(num, 0, 7);
     } else {
       ctx.fillStyle = num%10===0?'#c05010': num%5===0?'#1a60a0': '#7a6040';
