@@ -9,7 +9,7 @@
   const MAX_HAPPINESS = 20;
   const MAX_HEALTH = 20;
   const FORCED_STOPS = [20, 40, 60, 80];
-  const BRANCH_START = 20, BRANCH_END = 30, BRANCH_OFFSET_Y = 72;
+  const BRANCH_START = 20, BRANCH_END = 30;
   const PLAYER_COLORS = [
     '#1565c0','#c62828','#2e7d32','#e65100',
     '#6a1b9a','#00838f','#f9a825','#ad1457','#37474f'
@@ -69,22 +69,36 @@
     return sqs;
   }
 
-  // 分岐マスをsq20→sq30間で補間生成
+  // 分岐マス生成
+  // job: メインロードの既存マス位置をそのまま使用
+  // uni: sq20→sq30を左側へ大きくカーブさせたベジェ曲線
   const branchSquares = (function() {
     const sq20 = squares[BRANCH_START - 1];
     const sq30 = squares[BRANCH_END - 1];
     const cx20 = sq20.x + SQ_W/2, cy20 = sq20.y + SQ_H/2;
     const cx30 = sq30.x + SQ_W/2, cy30 = sq30.y + SQ_H/2;
-    const job = [], uni = [];
+
+    // 就職ルート: メインロードのマス21〜29をそのまま利用
+    const job = [];
+    for (let i = 1; i < BRANCH_END - BRANCH_START; i++) {
+      const sq = squares[BRANCH_START + i - 1];
+      job.push({ num: BRANCH_START + i, x: sq.x, y: sq.y, route: 'job' });
+    }
+
+    // 大学ルート: 左側へカーブする二次ベジェ曲線
+    // 制御点: sq20とsq30の中点より左に大きく引っ張る
+    const cpx = (cx20 + cx30) / 2 - Math.abs(cy20 - cy30) * 1.4;
+    const cpy = (cy20 + cy30) / 2 + (cy20 - cy30) * 0.1;
     const steps = BRANCH_END - BRANCH_START;
+    const uni = [];
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
-      const bx = cx20 + (cx30 - cx20) * t - SQ_W/2;
-      const by = cy20 + (cy30 - cy20) * t;
-      job.push({ num: BRANCH_START + i, x: bx, y: by + BRANCH_OFFSET_Y - SQ_H/2, route: 'job' });
-      uni.push({ num: BRANCH_START + i, x: bx, y: by - BRANCH_OFFSET_Y - SQ_H/2, route: 'uni' });
+      const bx = (1-t)*(1-t)*cx20 + 2*(1-t)*t*cpx + t*t*cx30;
+      const by = (1-t)*(1-t)*cy20 + 2*(1-t)*t*cpy + t*t*cy30;
+      uni.push({ num: BRANCH_START + i, x: bx - SQ_W/2, y: by - SQ_H/2, route: 'uni' });
     }
-    return { job, uni };
+
+    return { job, uni, cpx, cpy, cx20, cy20, cx30, cy30 };
   })();
 
   function getBranchSq(pos, route) {
@@ -278,7 +292,6 @@
     const st = getStats(playerData[myId]);
     const newPos = calcLanding(st.pos, roll);
 
-    // 分岐点に到着→ルート選択待機
     if (newPos === BRANCH_START && !st.route) {
       pendingRoll = { st, newPos };
       $('route-overlay').classList.remove('hidden');
@@ -328,10 +341,12 @@
 
   // ── ボード描画 ──
   function drawBoard(){
-    drawSky(); drawMountains(); drawRoad();
-    drawBranchPaths();
+    drawSky(); drawMountains();
+    drawUniBranchRoad(); // 大学ルートを先に描画（メインロードの下に来る）
+    drawRoad();          // メインロード（就職ルート区間を含む）
+    drawBranchLabels();
     squares.forEach(sq => {
-      if (sq.num > BRANCH_START && sq.num < BRANCH_END) return; // 分岐間はブランチマスのみ表示
+      if (sq.num > BRANCH_START && sq.num < BRANCH_END) return;
       drawSquare(sq);
     });
     branchSquares.job.forEach(sq => drawBranchSquare(sq));
@@ -339,48 +354,39 @@
     drawTokens();
   }
 
-  function drawBranchPaths(){
-    const sq20 = squares[BRANCH_START - 1];
-    const sq30 = squares[BRANCH_END - 1];
-    const cx20 = sq20.x + SQ_W/2, cy20 = sq20.y + SQ_H/2;
-    const cx30 = sq30.x + SQ_W/2, cy30 = sq30.y + SQ_H/2;
-
-    function pathThrough(arr) {
+  // 大学ルート専用道路（ベジェ曲線）
+  function drawUniBranchRoad(){
+    const {cpx, cpy, cx20, cy20, cx30, cy30} = branchSquares;
+    const roadW = SQ_H + 30;
+    ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
+    function bezier(){
       ctx.beginPath();
       ctx.moveTo(cx20, cy20);
-      arr.forEach(s => ctx.lineTo(s.x + SQ_W/2, s.y + SQ_H/2));
-      ctx.lineTo(cx30, cy30);
+      ctx.quadraticCurveTo(cpx, cpy, cx30, cy30);
     }
+    ctx.lineWidth=roadW+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; bezier(); ctx.stroke();
+    ctx.lineWidth=roadW+4;  ctx.strokeStyle='#c8a060';              bezier(); ctx.stroke();
+    ctx.lineWidth=roadW;    ctx.strokeStyle='#ddb870';              bezier(); ctx.stroke();
+    ctx.lineWidth=roadW-14; ctx.strokeStyle='rgba(255,235,180,0.35)'; bezier(); ctx.stroke();
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.setLineDash([18,22]);
+    bezier(); ctx.stroke(); ctx.setLineDash([]);
+    ctx.restore();
+  }
 
-    ctx.save();
-    ctx.lineJoin='round'; ctx.lineCap='round';
-
-    // 就職ルート（オレンジ）
-    ctx.lineWidth=10; ctx.strokeStyle='rgba(200,100,0,0.25)';
-    pathThrough(branchSquares.job); ctx.stroke();
-    ctx.lineWidth=5; ctx.strokeStyle='#d07020'; ctx.setLineDash([8,7]);
-    pathThrough(branchSquares.job); ctx.stroke();
-
-    // 大学ルート（ブルー）
-    ctx.lineWidth=10; ctx.strokeStyle='rgba(30,60,200,0.22)'; ctx.setLineDash([]);
-    pathThrough(branchSquares.uni); ctx.stroke();
-    ctx.lineWidth=5; ctx.strokeStyle='#3050c0'; ctx.setLineDash([8,7]);
-    pathThrough(branchSquares.uni); ctx.stroke();
-
-    ctx.setLineDash([]); ctx.restore();
-
-    // ラベル
+  // 分岐ルートのラベル表示
+  function drawBranchLabels(){
+    const j0 = branchSquares.job[4]; // 就職ルートの中間あたり
+    const u0 = branchSquares.uni[4]; // 大学ルートの中間あたり
     ctx.save();
     ctx.font='bold 12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    const j0=branchSquares.job[0];
-    const u0=branchSquares.uni[0];
-    ctx.fillStyle='rgba(255,255,255,0.85)';
-    ctx.fillRect(j0.x+SQ_W/2-44, j0.y+SQ_H+6, 88, 18);
-    ctx.fillRect(u0.x+SQ_W/2-44, u0.y-24, 88, 18);
-    ctx.fillStyle='#c06010';
-    ctx.fillText('💼 就職ルート', j0.x+SQ_W/2, j0.y+SQ_H+15);
-    ctx.fillStyle='#2040b0';
-    ctx.fillText('🎓 大学ルート', u0.x+SQ_W/2, u0.y-15);
+    // 就職ルートラベル（メインロード上）
+    const jx=j0.x+SQ_W/2, jy=j0.y-18;
+    ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(jx-46,jy-10,92,20,6); ctx.fill();
+    ctx.fillStyle='#b05010'; ctx.fillText('💼 就職ルート', jx, jy);
+    // 大学ルートラベル
+    const ux=u0.x+SQ_W/2, uy=u0.y-18;
+    ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
+    ctx.fillStyle='#1030b0'; ctx.fillText('🎓 大学ルート', ux, uy);
     ctx.restore();
   }
 
@@ -452,12 +458,12 @@
 
   function squareGrad(num,sx,sy,w,h){
     const g=ctx.createLinearGradient(sx,sy,sx,sy+h);
-    if(num===1)                      {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
-    else if(num===100)               {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
+    if(num===1)                        {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
+    else if(num===100)                 {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
     else if(FORCED_STOPS.includes(num)){g.addColorStop(0,'#ffe0e0');g.addColorStop(1,'#f08888');}
-    else if(num%10===0)              {g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
-    else if(num%5===0)               {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
-    else                             {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
+    else if(num%10===0)                {g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
+    else if(num%5===0)                 {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
+    else                               {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
     return g;
   }
   function squareBorder(num){
