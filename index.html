@@ -50,12 +50,22 @@
         <div id="dice-result"></div>
         <button id="btn-roll">🎲 サイコロを振る</button>
       </div>
-
-      <!-- プレイヤーステータスカード -->
       <div id="player-status-area"></div>
-
       <div class="stats">
         <span>ターン: <strong id="turn-number">0</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ルート選択オーバーレイ -->
+  <div id="route-overlay" class="hidden">
+    <div class="route-box">
+      <p class="route-icon">🚗</p>
+      <p class="route-title">20マス・分岐点！</p>
+      <p class="route-sub">あなたの人生の進路を選んでください。<br>30マスで再び共通ルートに戻ります。</p>
+      <div class="route-buttons">
+        <button id="btn-route-job">💼 就職ルート</button>
+        <button id="btn-route-uni">🎓 大学ルート</button>
       </div>
     </div>
   </div>

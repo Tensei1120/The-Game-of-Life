@@ -120,7 +120,7 @@ body {
 .stats { font-size:.9rem; color:#7a9ab8; }
 .stats strong { color:#1a5090; }
 
-/* ── プレイヤーステータスカード ── */
+/* プレイヤーステータスカード */
 #player-status-area {
   display:flex; gap:12px; flex-wrap:wrap; justify-content:center; width:100%;
 }
@@ -131,16 +131,9 @@ body {
   box-shadow:0 4px 16px rgba(30,80,160,.1);
   transition:border-color .2s, box-shadow .2s;
 }
-.psc.psc-active {
-  border-color:#3a90e0;
-  box-shadow:0 4px 20px rgba(58,144,224,.25);
-}
-.psc.psc-mine {
-  background:rgba(240,248,255,.95);
-}
-.psc-header {
-  display:flex; align-items:center; gap:8px; margin-bottom:10px;
-}
+.psc.psc-active { border-color:#3a90e0; box-shadow:0 4px 20px rgba(58,144,224,.25); }
+.psc.psc-mine { background:rgba(240,248,255,.95); }
+.psc-header { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
 .psc-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
 .psc-name { font-weight:700; font-size:.95rem; color:#1a3a5c; flex:1; }
 .psc-self {
@@ -153,9 +146,7 @@ body {
   border-radius:10px; background:#e8f4ff; color:#3a70b0;
   border:1px solid #c0d8f0; white-space:nowrap;
 }
-.psc-stats {
-  display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;
-}
+.psc-stats { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
 .psc-stat {
   display:flex; align-items:center; gap:4px;
   font-size:.82rem; color:#4a6a8a;
@@ -163,26 +154,47 @@ body {
   border:1px solid #d8e8f8;
 }
 .psc-stat-val { font-weight:700; color:#1a3a5c; }
-.psc-items {
-  display:grid; grid-template-columns:repeat(6,1fr); gap:4px;
-}
+.psc-items { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; }
 .item-slot {
-  aspect-ratio:1; border-radius:6px;
-  border:1.5px dashed #b8cce0;
-  background:#f0f8ff;
-  display:flex; align-items:center; justify-content:center;
-  font-size:.7rem; color:#90aac0;
-  min-height:28px; cursor:default;
-  transition:background .2s;
+  aspect-ratio:1; border-radius:6px; border:1.5px dashed #b8cce0;
+  background:#f0f8ff; display:flex; align-items:center; justify-content:center;
+  font-size:.7rem; color:#90aac0; min-height:28px; cursor:default;
 }
 .item-slot.filled {
-  border-style:solid; border-color:#7ab0e0;
-  background:#e4f0ff; color:#1a5090;
-  font-size:.65rem; font-weight:600;
-  text-align:center; padding:2px; line-height:1.2;
+  border-style:solid; border-color:#7ab0e0; background:#e4f0ff; color:#1a5090;
+  font-size:.65rem; font-weight:600; text-align:center; padding:2px; line-height:1.2;
 }
 
-/* ── 解散オーバーレイ ── */
+/* ルート選択オーバーレイ */
+#route-overlay {
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  background:rgba(0,20,60,.75); z-index:200; animation:fadeInOverlay .3s ease;
+}
+.route-box {
+  display:flex; flex-direction:column; align-items:center; gap:16px;
+  background:#fff; border-radius:24px; padding:48px 56px; text-align:center;
+  box-shadow:0 16px 48px rgba(0,0,0,.3); max-width:420px; width:90%;
+}
+.route-icon { font-size:2.8rem; }
+.route-title { font-size:1.4rem; font-weight:800; color:#1a3a5c; }
+.route-sub { font-size:.9rem; color:#6080a0; line-height:1.7; }
+.route-buttons { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; width:100%; margin-top:8px; }
+#btn-route-job {
+  flex:1; min-width:140px; padding:16px 20px; font-size:1rem; font-weight:700;
+  border:none; border-radius:12px;
+  background:linear-gradient(135deg,#ff8c00,#e06000); color:#fff;
+  cursor:pointer; transition:all .2s; box-shadow:0 4px 16px rgba(220,90,0,.35);
+}
+#btn-route-job:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(220,90,0,.45); }
+#btn-route-uni {
+  flex:1; min-width:140px; padding:16px 20px; font-size:1rem; font-weight:700;
+  border:none; border-radius:12px;
+  background:linear-gradient(135deg,#3a90e0,#1a50c0); color:#fff;
+  cursor:pointer; transition:all .2s; box-shadow:0 4px 16px rgba(30,80,200,.35);
+}
+#btn-route-uni:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(30,80,200,.45); }
+
+/* 解散オーバーレイ */
 #dissolution-overlay {
   position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
   background:rgba(0,20,60,.7); z-index:100; animation:fadeInOverlay .4s ease;

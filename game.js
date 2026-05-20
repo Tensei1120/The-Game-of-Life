@@ -4,11 +4,12 @@
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
-  const CW=1120, CH=930, SQ_W=64, SQ_H=48, GOAL_W=94, GOAL_H=70;
+  const CW=1120, CH=930, SQ_W=64, SQ_H=48, GOAL_W=94, GOAL_H=70, STOP_W=82, STOP_H=62;
   const MAX_PLAYERS = 9;
   const MAX_HAPPINESS = 20;
   const MAX_HEALTH = 20;
   const FORCED_STOPS = [20, 40, 60, 80];
+  const BRANCH_START = 20, BRANCH_END = 30, BRANCH_OFFSET_Y = 72;
   const PLAYER_COLORS = [
     '#1565c0','#c62828','#2e7d32','#e65100',
     '#6a1b9a','#00838f','#f9a825','#ad1457','#37474f'
@@ -29,13 +30,13 @@
 
   let myName='', roomId='', players=[], isHost=false, playerData={};
   let currentPlayerIndex=0, turnNumber=0, isMyTurn=false, rolling=false, channel=null;
+  let pendingRoll = null;
 
   function defaultStats(pos=1) {
-    return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH, items:Array(6).fill(null), job:null };
+    return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH, items:Array(6).fill(null), job:null, route:null };
   }
   function clampStats(st) {
-    return {
-      ...st,
+    return { ...st,
       happiness: Math.max(0, Math.min(MAX_HAPPINESS, st.happiness)),
       health:    Math.max(0, Math.min(MAX_HEALTH,    st.health)),
     };
@@ -43,7 +44,6 @@
   function getPos(d)   { return typeof d==='object'&&d!==null ? d.pos   : (d||1); }
   function getStats(d) { return typeof d==='object'&&d!==null ? d : defaultStats(d||1); }
 
-  // 強制ストップ考慮した着地マス計算
   function calcLanding(currentPos, roll) {
     const dest = Math.min(currentPos + roll, 100);
     const stop = FORCED_STOPS.find(s => s > currentPos && s <= dest);
@@ -51,6 +51,7 @@
   }
 
   const squares = buildSquares();
+
   function buildSquares() {
     const segLens=[]; let total=0;
     for (let i=1;i<WAYPOINTS.length;i++) {
@@ -66,6 +67,31 @@
       sqs.push({num:n+1, x:p0[0]+(p1[0]-p0[0])*t-SQ_W/2, y:p0[1]+(p1[1]-p0[1])*t-SQ_H/2});
     }
     return sqs;
+  }
+
+  // 分岐マスをsq20→sq30間で補間生成
+  const branchSquares = (function() {
+    const sq20 = squares[BRANCH_START - 1];
+    const sq30 = squares[BRANCH_END - 1];
+    const cx20 = sq20.x + SQ_W/2, cy20 = sq20.y + SQ_H/2;
+    const cx30 = sq30.x + SQ_W/2, cy30 = sq30.y + SQ_H/2;
+    const job = [], uni = [];
+    const steps = BRANCH_END - BRANCH_START;
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const bx = cx20 + (cx30 - cx20) * t - SQ_W/2;
+      const by = cy20 + (cy30 - cy20) * t;
+      job.push({ num: BRANCH_START + i, x: bx, y: by + BRANCH_OFFSET_Y - SQ_H/2, route: 'job' });
+      uni.push({ num: BRANCH_START + i, x: bx, y: by - BRANCH_OFFSET_Y - SQ_H/2, route: 'uni' });
+    }
+    return { job, uni };
+  })();
+
+  function getBranchSq(pos, route) {
+    if (pos > BRANCH_START && pos < BRANCH_END && route) {
+      return (branchSquares[route] || []).find(s => s.num === pos) || null;
+    }
+    return null;
   }
 
   const $=id=>document.getElementById(id);
@@ -106,7 +132,6 @@
         const {error}=await sb.from('rooms').insert({id:roomId,host_id:myId,alive_cells:{}});
         if(error)throw error; isHost=true;
       } else {isHost=roomData.host_id===myId;}
-
       const {data:ep}=await sb.from('room_players').select('player_id,color').eq('room_id',roomId);
       const existingPlayers=ep||[];
       const alreadyIn=existingPlayers.some(p=>p.player_id===myId);
@@ -114,7 +139,6 @@
         wordError.textContent=`このルームは満員です（最大${MAX_PLAYERS}人）`;
         return;
       }
-
       const usedColors=existingPlayers.map(p=>p.color);
       const myColor=PLAYER_COLORS.find(c=>!usedColors.includes(c))||PLAYER_COLORS[0];
       const {error:pe}=await sb.from('room_players').upsert(
@@ -220,12 +244,12 @@
   function renderPlayerStatusCards(activeIdx){
     $('player-status-area').innerHTML=players.map((p,i)=>{
       const st=getStats(playerData[p.player_id]);
-      const jobLabel=st.job||'未定';
+      const routeLabel = st.route==='job'?' 💼就職':st.route==='uni'?' 🎓大学':'';
+      const jobLabel=(st.job||'未定')+routeLabel;
       const isMine=p.player_id===myId;
       const itemsHtml=st.items.map(item=>
-        item
-          ? `<div class="item-slot filled" title="${item}">${item}</div>`
-          : `<div class="item-slot">∅</div>`
+        item ? `<div class="item-slot filled" title="${item}">${item}</div>`
+             : `<div class="item-slot">∅</div>`
       ).join('');
       return `
         <div class="psc${i===activeIdx?' psc-active':''}${isMine?' psc-mine':''}">
@@ -245,26 +269,53 @@
     }).join('');
   }
 
-  $('btn-roll').addEventListener('click',async()=>{
-    if(!isMyTurn||rolling)return;
-    rolling=true; $('btn-roll').disabled=true;
-    const roll=Math.floor(Math.random()*6)+1;
+  $('btn-roll').addEventListener('click', async () => {
+    if (!isMyTurn || rolling) return;
+    rolling = true;
+    $('btn-roll').disabled = true;
+    const roll = Math.floor(Math.random() * 6) + 1;
     await animateDice(roll);
-    const st=getStats(playerData[myId]);
-    const newPos=calcLanding(st.pos, roll);
-    const stopped=FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll;
-    if(stopped) showStopMessage(newPos);
-    const newData={...playerData,[myId]:clampStats({...st,pos:newPos})};
-    const nextIndex=(currentPlayerIndex+1)%players.length;
+    const st = getStats(playerData[myId]);
+    const newPos = calcLanding(st.pos, roll);
+
+    // 分岐点に到着→ルート選択待機
+    if (newPos === BRANCH_START && !st.route) {
+      pendingRoll = { st, newPos };
+      $('route-overlay').classList.remove('hidden');
+      return;
+    }
+
+    if (FORCED_STOPS.includes(newPos) && newPos !== st.pos + roll) showStopMessage(newPos);
+    const newRoute = (st.route && newPos >= BRANCH_END) ? null : (st.route || null);
+    await saveRoll(st, newPos, newRoute);
+  });
+
+  async function saveRoll(st, newPos, route) {
+    const newData = { ...playerData, [myId]: clampStats({ ...st, pos: newPos, route: route || null }) };
+    const nextIndex = (currentPlayerIndex + 1) % players.length;
     await sb.from('rooms').update({
-      alive_cells:newData, current_player_index:nextIndex,
-      turn_number:nextIndex===0?turnNumber+1:turnNumber,
-    }).eq('id',roomId);
+      alive_cells: newData,
+      current_player_index: nextIndex,
+      turn_number: nextIndex === 0 ? turnNumber + 1 : turnNumber,
+    }).eq('id', roomId);
+  }
+
+  $('btn-route-job').addEventListener('click', async () => {
+    $('route-overlay').classList.add('hidden');
+    if (!pendingRoll) return;
+    const { st, newPos } = pendingRoll; pendingRoll = null;
+    await saveRoll(st, newPos, 'job');
+  });
+
+  $('btn-route-uni').addEventListener('click', async () => {
+    $('route-overlay').classList.add('hidden');
+    if (!pendingRoll) return;
+    const { st, newPos } = pendingRoll; pendingRoll = null;
+    await saveRoll(st, newPos, 'uni');
   });
 
   function showStopMessage(pos){
-    const el=$('dice-result');
-    el.textContent+=`　★ ${pos}マスで強制ストップ！`;
+    $('dice-result').textContent += `　★ ${pos}マスで強制ストップ！`;
   }
 
   const DICE_FACE=['⚀','⚁','⚂','⚃','⚄','⚅'];
@@ -276,7 +327,76 @@
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
   // ── ボード描画 ──
-  function drawBoard(){drawSky();drawMountains();drawRoad();squares.forEach(drawSquare);drawTokens();}
+  function drawBoard(){
+    drawSky(); drawMountains(); drawRoad();
+    drawBranchPaths();
+    squares.forEach(sq => {
+      if (sq.num > BRANCH_START && sq.num < BRANCH_END) return; // 分岐間はブランチマスのみ表示
+      drawSquare(sq);
+    });
+    branchSquares.job.forEach(sq => drawBranchSquare(sq));
+    branchSquares.uni.forEach(sq => drawBranchSquare(sq));
+    drawTokens();
+  }
+
+  function drawBranchPaths(){
+    const sq20 = squares[BRANCH_START - 1];
+    const sq30 = squares[BRANCH_END - 1];
+    const cx20 = sq20.x + SQ_W/2, cy20 = sq20.y + SQ_H/2;
+    const cx30 = sq30.x + SQ_W/2, cy30 = sq30.y + SQ_H/2;
+
+    function pathThrough(arr) {
+      ctx.beginPath();
+      ctx.moveTo(cx20, cy20);
+      arr.forEach(s => ctx.lineTo(s.x + SQ_W/2, s.y + SQ_H/2));
+      ctx.lineTo(cx30, cy30);
+    }
+
+    ctx.save();
+    ctx.lineJoin='round'; ctx.lineCap='round';
+
+    // 就職ルート（オレンジ）
+    ctx.lineWidth=10; ctx.strokeStyle='rgba(200,100,0,0.25)';
+    pathThrough(branchSquares.job); ctx.stroke();
+    ctx.lineWidth=5; ctx.strokeStyle='#d07020'; ctx.setLineDash([8,7]);
+    pathThrough(branchSquares.job); ctx.stroke();
+
+    // 大学ルート（ブルー）
+    ctx.lineWidth=10; ctx.strokeStyle='rgba(30,60,200,0.22)'; ctx.setLineDash([]);
+    pathThrough(branchSquares.uni); ctx.stroke();
+    ctx.lineWidth=5; ctx.strokeStyle='#3050c0'; ctx.setLineDash([8,7]);
+    pathThrough(branchSquares.uni); ctx.stroke();
+
+    ctx.setLineDash([]); ctx.restore();
+
+    // ラベル
+    ctx.save();
+    ctx.font='bold 12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const j0=branchSquares.job[0];
+    const u0=branchSquares.uni[0];
+    ctx.fillStyle='rgba(255,255,255,0.85)';
+    ctx.fillRect(j0.x+SQ_W/2-44, j0.y+SQ_H+6, 88, 18);
+    ctx.fillRect(u0.x+SQ_W/2-44, u0.y-24, 88, 18);
+    ctx.fillStyle='#c06010';
+    ctx.fillText('💼 就職ルート', j0.x+SQ_W/2, j0.y+SQ_H+15);
+    ctx.fillStyle='#2040b0';
+    ctx.fillText('🎓 大学ルート', u0.x+SQ_W/2, u0.y-15);
+    ctx.restore();
+  }
+
+  function drawBranchSquare({num, x, y, route}){
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
+    const g = ctx.createLinearGradient(x, y, x, y+SQ_H);
+    if (route==='job') { g.addColorStop(0,'#fff3d8'); g.addColorStop(1,'#f0c870'); }
+    else               { g.addColorStop(0,'#e4eaff'); g.addColorStop(1,'#a0b8f8'); }
+    ctx.fillStyle=g; rr(x,y,SQ_W,SQ_H,6); ctx.fill(); ctx.restore();
+    ctx.strokeStyle=route==='job'?'#c06810':'#2840b8'; ctx.lineWidth=1.5;
+    rr(x,y,SQ_W,SQ_H,6); ctx.stroke();
+    ctx.fillStyle=route==='job'?'#904010':'#1830a0';
+    ctx.font='11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(num, x+SQ_W/2, y+SQ_H/2);
+  }
 
   function drawSky(){
     const sky=ctx.createLinearGradient(0,0,0,CH);
@@ -332,18 +452,18 @@
 
   function squareGrad(num,sx,sy,w,h){
     const g=ctx.createLinearGradient(sx,sy,sx,sy+h);
-    if(num===1)         {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
-    else if(num===100)  {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
-    else if(FORCED_STOPS.includes(num)){g.addColorStop(0,'#ffe0e0');g.addColorStop(1,'#f08080');}
-    else if(num%10===0) {g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
-    else if(num%5===0)  {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
-    else                {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
+    if(num===1)                      {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
+    else if(num===100)               {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
+    else if(FORCED_STOPS.includes(num)){g.addColorStop(0,'#ffe0e0');g.addColorStop(1,'#f08888');}
+    else if(num%10===0)              {g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
+    else if(num%5===0)               {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
+    else                             {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
     return g;
   }
   function squareBorder(num){
-    if(num===1)return'#2a8a40';if(num===100)return'#c89000';
+    if(num===1)return'#2a8a40'; if(num===100)return'#c89000';
     if(FORCED_STOPS.includes(num))return'#c02020';
-    if(num%10===0)return'#d06020';if(num%5===0)return'#3a80c0';return'#b89860';
+    if(num%10===0)return'#d06020'; if(num%5===0)return'#3a80c0'; return'#b89860';
   }
   function rr(x,y,w,h,r){
     ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);
@@ -353,9 +473,10 @@
     ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
   }
   function drawSquare({num,x,y}){
-    const isGoal=num===100,isStart=num===1,isStop=FORCED_STOPS.includes(num);
-    const w=isGoal?GOAL_W:SQ_W,h=isGoal?GOAL_H:SQ_H;
-    const sx=x+(SQ_W-w)/2,sy=y+(SQ_H-h)/2;
+    const isGoal=num===100, isStart=num===1, isStop=FORCED_STOPS.includes(num);
+    const w = isGoal?GOAL_W : isStop?STOP_W : SQ_W;
+    const h = isGoal?GOAL_H : isStop?STOP_H : SQ_H;
+    const sx=x+(SQ_W-w)/2, sy=y+(SQ_H-h)/2;
     ctx.save();ctx.shadowColor='rgba(0,0,0,0.18)';ctx.shadowBlur=6;ctx.shadowOffsetY=2;
     ctx.fillStyle=squareGrad(num,sx,sy,w,h);rr(sx,sy,w,h,6);ctx.fill();ctx.restore();
     ctx.strokeStyle=squareBorder(num);ctx.lineWidth=isGoal||isStart||isStop?2.5:1.5;
@@ -363,29 +484,36 @@
     ctx.save();ctx.globalAlpha=0.4;ctx.fillStyle='rgba(255,255,255,0.8)';
     ctx.beginPath();ctx.roundRect(sx+2,sy+2,w-4,h*.35,[6,6,0,0]);ctx.fill();ctx.restore();
     ctx.textAlign='center';ctx.textBaseline='middle';
-    const cx=sx+w/2,cy=sy+h/2;
+    const cx=sx+w/2, cy=sy+h/2;
     if(isGoal){
       ctx.fillStyle='#8a6000';ctx.font='bold 14px Segoe UI';ctx.fillText('GOAL',cx,cy-12);
       ctx.font='22px serif';ctx.fillText('🏆',cx,cy+10);
     } else if(isStart){
       ctx.fillStyle='#1a6030';ctx.font='bold 12px Segoe UI';ctx.fillText('START',cx,cy);
     } else if(isStop){
-      ctx.fillStyle='#a00000';ctx.font='bold 11px Segoe UI';ctx.fillText('★STOP',cx,cy-7);
-      ctx.font='10px Segoe UI';ctx.fillText(num,cx,cy+7);
+      ctx.fillStyle='#a00000';ctx.font='bold 12px Segoe UI';ctx.fillText('★STOP',cx,cy-9);
+      ctx.font='bold 11px Segoe UI';ctx.fillText(num,cx,cy+9);
     } else {
       ctx.fillStyle=num%10===0?'#c05010':num%5===0?'#1a60a0':'#7a6040';
       ctx.font=num%10===0?'bold 12px Segoe UI':'11px Segoe UI';
       ctx.fillText(num,cx,cy);
     }
   }
+
   function drawTokens(){
-    const byPos={};
-    players.forEach(p=>{const pos=getPos(playerData[p.player_id]);(byPos[pos]=byPos[pos]||[]).push(p);});
-    Object.entries(byPos).forEach(([posStr,group])=>{
-      const idx=parseInt(posStr)-1;
-      if(idx<0||idx>=squares.length)return;
-      const {x,y}=squares[idx],cx=x+SQ_W/2,cy=y+SQ_H/2;
-      group.forEach((p,i)=>{
+    const byKey={};
+    players.forEach(p=>{
+      const st=getStats(playerData[p.player_id]);
+      const bsq=getBranchSq(st.pos, st.route);
+      const sq=bsq || squares[st.pos-1];
+      if(!sq)return;
+      const key=`${st.pos}-${st.route||'main'}`;
+      (byKey[key]=byKey[key]||[]).push({p,sq});
+    });
+    Object.values(byKey).forEach(group=>{
+      const {sq}=group[0];
+      const cx=sq.x+SQ_W/2, cy=sq.y+SQ_H/2;
+      group.forEach(({p},i)=>{
         const off=tokenOffset(group.length,i),tx=cx+off.x,ty=cy+off.y,R=14;
         ctx.save();ctx.shadowColor='rgba(0,0,0,0.4)';ctx.shadowBlur=8;ctx.shadowOffsetY=3;
         ctx.beginPath();ctx.arc(tx,ty,R,0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();ctx.restore();
