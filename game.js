@@ -5,9 +5,9 @@
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
   const CW=1120, CH=930;
-  const SQ_ACROSS = 52;
+  const SQ_ACROSS = 110;
   let SQ_ALONG = 44;
-  let ROAD_W = 74;
+  let ROAD_W = 132;
   const MAX_PLAYERS = 9;
   const MAX_HAPPINESS = 20;
   const MAX_HEALTH = 20;
@@ -53,13 +53,9 @@
     return stop || dest;
   }
 
-  // パスの法線ベクトル（道路方向に対して垂直）
   function perp(angle) { return { nx: -Math.sin(angle), ny: Math.cos(angle) }; }
-
-  // 文字生成用輺間計算
   function lerp(a, b, t) { return { x: a.x + (b.x-a.x)*t, y: a.y + (b.y-a.y)*t }; }
 
-  // 4頂点ポリゴンのパスを設定
   function quadPath(corners) {
     ctx.beginPath();
     ctx.moveTo(corners[0].x, corners[0].y);
@@ -81,7 +77,6 @@
     SQ_ALONG = total / 99;
     const spacing = total / 99;
 
-    // 第1パス: 各マスの中心座標と路面方向角度
     const pts = [];
     for (let n = 0; n < 100; n++) {
       const target = n * spacing;
@@ -96,12 +91,8 @@
       });
     }
 
-    // 第2パス: 101個の境界線を計算
-    // 境界[i]はマスiとマスi+1の中心点の中間点
     const bounds = [];
-    // 境界[0]: マス1の左端u（中心座標そのまま）
     { const p = perp(pts[0].angle); bounds.push({ x: pts[0].cx, y: pts[0].cy, nx: p.nx, ny: p.ny }); }
-    // 境界[1..99]: 隣接マス中心点の中間点
     for (let i = 1; i <= 99; i++) {
       const mx = (pts[i-1].cx + pts[i].cx) / 2;
       const my = (pts[i-1].cy + pts[i].cy) / 2;
@@ -109,10 +100,8 @@
       const p = perp(angle);
       bounds.push({ x: mx, y: my, nx: p.nx, ny: p.ny });
     }
-    // 境界[100]: マス100の右端u
     { const p = perp(pts[99].angle); bounds.push({ x: pts[99].cx, y: pts[99].cy, nx: p.nx, ny: p.ny }); }
 
-    // 境界から4頂点クォッドを構築
     const sqs = [];
     for (let n = 0; n < 100; n++) {
       const num = n + 1;
@@ -124,27 +113,24 @@
         num,
         cx: pts[n].cx, cy: pts[n].cy,
         corners: [
-          { x: L.x + L.nx * half_h, y: L.y + L.ny * half_h },  // 左上
-          { x: R.x + R.nx * half_h, y: R.y + R.ny * half_h },  // 右上
-          { x: R.x - R.nx * half_h, y: R.y - R.ny * half_h },  // 右下
-          { x: L.x - L.nx * half_h, y: L.y - L.ny * half_h },  // 左下
+          { x: L.x + L.nx * half_h, y: L.y + L.ny * half_h },
+          { x: R.x + R.nx * half_h, y: R.y + R.ny * half_h },
+          { x: R.x - R.nx * half_h, y: R.y - R.ny * half_h },
+          { x: L.x - L.nx * half_h, y: L.y - L.ny * half_h },
         ]
       });
     }
     return sqs;
   }
 
-  // 分岐マス生成
   const branchSquares = (function() {
     const sq20 = squares[BRANCH_START - 1];
     const sq30 = squares[BRANCH_END - 1];
     const cx20 = sq20.cx, cy20 = sq20.cy;
     const cx30 = sq30.cx, cy30 = sq30.cy;
 
-    // 就職ルート: メインロードのマス21〜29をそのまま使用（クォッドごとコピー）
     const job = squares.slice(BRANCH_START, BRANCH_END - 1).map(sq => ({ ...sq, route: 'job' }));
 
-    // 大学ルート: 左側へカーブするベジェ曲線（弧長パラメータ化）
     const cpx = (cx20 + cx30) / 2 - Math.abs(cy20 - cy30) * 1.4;
     const cpy = (cy20 + cy30) / 2 + (cy20 - cy30) * 0.1;
 
@@ -155,7 +141,6 @@
       };
     }
 
-    // 弧長テーブル
     const SAMPLES = 600;
     const arcSamples = [{ t: 0, len: 0 }];
     let arcTotal = 0;
@@ -172,10 +157,9 @@
       return b.len===a.len ? a.t : a.t + (b.t-a.t)*(len-a.len)/(b.len-a.len);
     }
 
-    const steps = BRANCH_END - BRANCH_START; // 10
+    const steps = BRANCH_END - BRANCH_START;
     const uniSpacing = arcTotal / steps;
 
-    // 11点を構築: allPts[0]=sq20, allPts[1..9]=uni21〜29, allPts[10]=sq30
     const allPts = [{ cx: cx20, cy: cy20 }];
     for (let i = 1; i < steps; i++) {
       const pt = bezierPt(tAtLen(i * uniSpacing));
@@ -183,7 +167,6 @@
     }
     allPts.push({ cx: cx30, cy: cy30 });
 
-    // 10個の境界線 (bounds[0..9]): 隣接点間の中間点
     const bounds = [];
     for (let i = 0; i <= 9; i++) {
       const mx = (allPts[i].cx + allPts[i+1].cx) / 2;
@@ -488,16 +471,15 @@
     if (!j0 || !u0) return;
     ctx.save();
     ctx.font='bold 12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    const jx = j0.cx, jy = j0.cy - 26;
+    const jx = j0.cx, jy = j0.cy - SQ_ACROSS * 0.65;
     ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(jx-46,jy-10,92,20,6); ctx.fill();
     ctx.fillStyle='#b05010'; ctx.fillText('💼 就職ルート', jx, jy);
-    const ux = u0.cx, uy = u0.cy - 26;
+    const ux = u0.cx, uy = u0.cy - SQ_ACROSS * 0.65;
     ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
     ctx.fillStyle='#1030b0'; ctx.fillText('🎓 大学ルート', ux, uy);
     ctx.restore();
   }
 
-  // クォッドのトップ・ボトム中間点を使ったグラデーション
   function quadGrad(num, corners, isJob, isUni) {
     const tx = (corners[0].x + corners[1].x) / 2;
     const ty = (corners[0].y + corners[1].y) / 2;
@@ -523,19 +505,16 @@
   function drawSquare({num, cx, cy, corners}){
     const isGoal=num===100, isStart=num===1, isStop=FORCED_STOPS.includes(num);
 
-    // 影付き塗りつぶし
     ctx.save();
     ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
     ctx.fillStyle = quadGrad(num, corners, false, false);
     quadPath(corners); ctx.fill();
     ctx.restore();
 
-    // ボーダー
     ctx.strokeStyle = squareBorder(num);
     ctx.lineWidth = isGoal||isStart||isStop ? 2.5 : 1.5;
     quadPath(corners); ctx.stroke();
 
-    // 上郧35%のグロスハイライト
     ctx.save();
     ctx.globalAlpha = 0.32; ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.beginPath();
@@ -546,19 +525,18 @@
     ctx.closePath(); ctx.fill();
     ctx.restore();
 
-    // テキスト（常に正立）
     ctx.textAlign='center'; ctx.textBaseline='middle';
     if(isGoal){
-      ctx.fillStyle='#8a6000'; ctx.font='bold 13px Segoe UI'; ctx.fillText('GOAL', cx, cy-9);
-      ctx.font='18px serif'; ctx.fillText('🏆', cx, cy+9);
+      ctx.fillStyle='#8a6000'; ctx.font='bold 14px Segoe UI'; ctx.fillText('GOAL', cx, cy-11);
+      ctx.font='22px serif'; ctx.fillText('🏆', cx, cy+12);
     } else if(isStart){
-      ctx.fillStyle='#1a6030'; ctx.font='bold 11px Segoe UI'; ctx.fillText('START', cx, cy);
+      ctx.fillStyle='#1a6030'; ctx.font='bold 13px Segoe UI'; ctx.fillText('START', cx, cy);
     } else if(isStop){
-      ctx.fillStyle='#a00000'; ctx.font='bold 10px Segoe UI'; ctx.fillText('★STOP', cx, cy-6);
-      ctx.font='bold 10px Segoe UI'; ctx.fillText(num, cx, cy+7);
+      ctx.fillStyle='#a00000'; ctx.font='bold 12px Segoe UI'; ctx.fillText('★STOP', cx, cy-8);
+      ctx.font='bold 12px Segoe UI'; ctx.fillText(num, cx, cy+9);
     } else {
       ctx.fillStyle = num%10===0?'#c05010': num%5===0?'#1a60a0': '#7a6040';
-      ctx.font = num%10===0?'bold 12px Segoe UI': '11px Segoe UI';
+      ctx.font = num%10===0?'bold 14px Segoe UI': '12px Segoe UI';
       ctx.fillText(num, cx, cy);
     }
   }
@@ -577,7 +555,7 @@
     quadPath(corners); ctx.stroke();
 
     ctx.fillStyle = isJob ? '#904010' : '#1830a0';
-    ctx.font='11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(num, cx, cy);
   }
 
@@ -646,7 +624,7 @@
       const {sq}=group[0];
       const cx=sq.cx, cy=sq.cy;
       group.forEach(({p},i)=>{
-        const off=tokenOffset(group.length,i),tx=cx+off.x,ty=cy+off.y,R=14;
+        const off=tokenOffset(group.length,i),tx=cx+off.x,ty=cy+off.y,R=16;
         ctx.save();ctx.shadowColor='rgba(0,0,0,0.4)';ctx.shadowBlur=8;ctx.shadowOffsetY=3;
         ctx.beginPath();ctx.arc(tx,ty,R,0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();ctx.restore();
         const tg=ctx.createRadialGradient(tx-R*.3,ty-R*.3,R*.05,tx,ty,R);
@@ -654,7 +632,7 @@
         ctx.beginPath();ctx.arc(tx,ty,R,0,Math.PI*2);ctx.fillStyle=tg;ctx.fill();
         ctx.strokeStyle='rgba(255,255,255,0.85)';ctx.lineWidth=2;
         ctx.beginPath();ctx.arc(tx,ty,R,0,Math.PI*2);ctx.stroke();
-        ctx.fillStyle='#fff';ctx.font='bold 10px Segoe UI';
+        ctx.fillStyle='#fff';ctx.font='bold 11px Segoe UI';
         ctx.textAlign='center';ctx.textBaseline='middle';
         ctx.fillText(p.player_name[0].toUpperCase(),tx,ty);
       });
@@ -663,7 +641,7 @@
   function tokenOffset(total,i){
     if(total===1)return{x:0,y:0};
     const a=(i/total)*Math.PI*2-Math.PI/2;
-    return{x:Math.cos(a)*13,y:Math.sin(a)*13};
+    return{x:Math.cos(a)*16,y:Math.sin(a)*16};
   }
 
 }());
