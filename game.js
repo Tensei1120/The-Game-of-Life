@@ -44,6 +44,7 @@
     '貧困家庭':   { desc:'毎ターン1万円失う・健康度-1\n所持金20万円超で消滅\n20マス目で就職ルート強制',   perTurn:{money:-1,health:-1},            disappearIfMoneyAbove:20, forceRoute:{pos:20,route:'job'} },
     '昭和親父':   { desc:'20マス目まで捨てられない\nグローブを守る',                                      undiscardableUntil:20, protects:['グローブ'] },
     'グローブ':   { desc:'毎ターン健康度+1',                                                              perTurn:{health:1} },
+    '友達':       { desc:'毎ターン幸福度+3',                                                              perTurn:{happiness:3} },
   };
 
   function rollStartItems(){
@@ -701,6 +702,7 @@
     '貧困家庭':    'linear-gradient(150deg,#a0aa98 0%,#6a7462 100%)',
     '昭和親父':    'linear-gradient(150deg,#e8a860 0%,#b86e28 100%)',
     'グローブ':    'linear-gradient(150deg,#7ed87e 0%,#3aaa3a 100%)',
+    '友達':        'linear-gradient(150deg,#ffe97a 0%,#8dd87e 100%)',
   };
   function removeWhiteBg(srcImg){
     const cv=document.createElement('canvas');
