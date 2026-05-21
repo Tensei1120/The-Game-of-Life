@@ -73,6 +73,7 @@
   let currentPlayerIndex=0, turnNumber=0, isMyTurn=false, rolling=false, channel=null;
   let pendingRoll = null, pendingCommit = null, prevPlayerData = {};
   const processedImgCache = {};
+  let itemAcquisitionQueue = [], itemAcquisitionActive = false, gameStartShown = false;
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -362,7 +363,9 @@
     players.forEach(p=>{
       const st=defaultStats(0);
       const startItems=rollStartItems();
-      startItems.forEach((item,i)=>{ if(i<st.items.length) st.items[i]=item; });
+      const newSlots=[];
+      startItems.forEach((item,i)=>{ if(i<st.items.length){st.items[i]=item;newSlots.push(i);} });
+      st.__new_item_slots=newSlots;
       initData[p.player_id]=st;
     });
     await sb.from('rooms').update({status:'playing',alive_cells:initData}).eq('id',roomId);
@@ -385,6 +388,13 @@
         $('room-badge').textContent='ルーム: '+roomId;
         applyRoomState(room); showScreen('game-screen');
       } else {applyRoomState(room);}
+      if(room.status==='playing'&&!gameStartShown){
+        gameStartShown=true;
+        const mySt=getStats(playerData[myId]);
+        const ns=mySt.__new_item_slots||[];
+        const si=ns.map(i=>mySt.items[i]).filter(Boolean);
+        if(si.length) setTimeout(()=>queueItemAcquisition(si),600);
+      }
       if(room.status==='finished') showResultScreen();
     }
   }
@@ -547,15 +557,17 @@
     return changed?{...st,items}:st;
   }
   function applyPerTurnEffects(st){
+    const newSlots=st.__new_item_slots||[];
     let money=st.money,happiness=st.happiness,health=st.health;
-    for(const item of st.items){
-      if(!item) continue;
+    for(let i=0;i<st.items.length;i++){
+      if(newSlots.includes(i)) continue;
+      const item=st.items[i]; if(!item) continue;
       const pt=ITEMS[item]?.perTurn; if(!pt) continue;
       if(pt.money)     money     +=pt.money;
       if(pt.happiness) happiness +=pt.happiness;
       if(pt.health)    health    +=pt.health;
     }
-    return{...st,money,happiness,health};
+    return{...st,money,happiness,health,__new_item_slots:[]};
   }
 
   function isEventSquare(pos){
@@ -584,8 +596,10 @@
     if(ev.item){
       const items=[...st.items];
       const slot=items.indexOf(null);
-      if(slot>=0){items[slot]=ev.item;next.items=items;}
-      else next._pendingItem=ev.item;
+      if(slot>=0){
+        items[slot]=ev.item; next.items=items;
+        next.__new_item_slots=[...(st.__new_item_slots||[]),slot];
+      } else next._pendingItem=ev.item;
     }
     return next;
   }
@@ -690,6 +704,7 @@
       showDiscardOverlay(st.items,pendingItem);
       return;
     }
+    if(ev.item) queueItemAcquisition([ev.item]);
     await doCommitSave(st,newUsedIds);
   });
 
@@ -705,6 +720,8 @@
       const onDiscard=ITEMS[discarded]?.onDiscard;
       if(onDiscard?.money) st.money=(st.money||0)+onDiscard.money;
       st.items[idx]=pendingItem;
+      st.__new_item_slots=[...(newSt.__new_item_slots||[]),idx];
+      queueItemAcquisition([pendingItem]);
     }
     await doCommitSave(st,newUsedIds);
   });
@@ -745,10 +762,21 @@
   }
 
   let ttTimer=null;
-  function showItemCard(item){
-    const def=ITEMS[item]; if(!def) return;
+  function queueItemAcquisition(items){
+    itemAcquisitionQueue.push(...items.filter(Boolean));
+    if(!itemAcquisitionActive) showNextAcquisition();
+  }
+  function showNextAcquisition(){
+    if(!itemAcquisitionQueue.length){ itemAcquisitionActive=false; return; }
+    itemAcquisitionActive=true;
+    showItemCard(itemAcquisitionQueue.shift(),true);
+  }
+
+  function showItemCard(item,acquired=false){
+    const def=ITEMS[item]; if(!def&&!acquired) return;
     $('item-card-name').textContent=item;
-    $('item-card-desc').textContent=def.desc;
+    $('item-card-desc').textContent=def?.desc||'';
+    $('item-card-banner-name').textContent=item;
     const wrap=document.querySelector('.item-card-img-wrap');
     if(wrap) wrap.style.background=ITEM_BG[item]||'linear-gradient(150deg,#c6d9f6 0%,#deeeff 100%)';
     const img=$('item-card-img');
@@ -760,9 +788,11 @@
     };
     loader.onerror=()=>{};
     loader.src=`items/${item}.png`;
-    $('item-card-overlay').classList.remove('hidden');
+    const overlay=$('item-card-overlay');
+    acquired ? overlay.classList.add('acquire') : overlay.classList.remove('acquire');
+    overlay.classList.remove('hidden');
   }
-  function hideItemCard(){ $('item-card-overlay').classList.add('hidden'); clearTimeout(ttTimer); }
+  function hideItemCard(){ $('item-card-overlay').classList.remove('acquire'); $('item-card-overlay').classList.add('hidden'); clearTimeout(ttTimer); }
   function bindItemCard(area){
     area.addEventListener('mousedown',e=>{
       const s=e.target.closest('.item-slot.filled[data-item]'); if(!s)return;
@@ -777,7 +807,15 @@
     area.addEventListener('touchend',()=>clearTimeout(ttTimer));
     area.addEventListener('touchcancel',()=>clearTimeout(ttTimer));
   }
-  $('item-card-overlay').addEventListener('click',hideItemCard);
+  $('item-card-overlay').addEventListener('click',e=>{
+    if($('item-card-overlay').classList.contains('acquire')) return;
+    if(e.target===$('item-card-overlay')) hideItemCard();
+  });
+  $('btn-item-card-ok').addEventListener('click',()=>{
+    $('item-card-overlay').classList.add('hidden');
+    $('item-card-overlay').classList.remove('acquire');
+    showNextAcquisition();
+  });
   bindItemCard($('player-status-area'));
 
   const DICE_FACE=['⚀','⚁','⚂','⚃','⚄','⚅'];
