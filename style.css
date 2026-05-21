@@ -193,7 +193,7 @@ body {
   border-radius: 10px; background: #e8f4ff; color: #3a70b0;
   border: 1px solid #c0d8f0; white-space: nowrap;
 }
-.psc-stats { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.psc-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
 .psc-stat {
   display: flex; align-items: center; gap: 3px;
   font-size: .78rem; color: #4a6a8a;
