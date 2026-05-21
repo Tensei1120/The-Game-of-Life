@@ -594,7 +594,7 @@
     const stepsEl=$('dice-steps-big');
     el.textContent=''; stepsEl.textContent='';
     disp.classList.remove('hidden','landed'); disp.classList.add('rolling');
-    const delays=[50,50,55,60,65,75,90,115,150,200,255,320];
+    const delays=[35,40,50,60,75,95,120,125];
     for(const d of delays){
       const f=DICE_FACE[Math.floor(Math.random()*6)];
       el.textContent=f; face.textContent=f; await sleep(d);
