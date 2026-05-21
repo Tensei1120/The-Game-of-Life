@@ -5,14 +5,14 @@
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
   const CW=1120, CH=930;
-  let SQ_ACROSS = 44;  // set dynamically in buildSquares to match SQ_ALONG (square tiles)
-  let SQ_ALONG = 44;
-  let ROAD_W = 66;
+  let SQ_ACROSS = 44;
+  let SQ_ALONG  = 44;
+  let ROAD_W    = 52;
   const MAX_PLAYERS = 9;
   const MAX_HAPPINESS = 20;
-  const MAX_HEALTH = 20;
-  const FORCED_STOPS = [20, 40, 60, 80];
-  const BRANCH_START = 20, BRANCH_END = 30;
+  const MAX_HEALTH    = 20;
+  const FORCED_STOPS  = [20, 40, 60, 80];
+  const BRANCH_START  = 20, BRANCH_END = 30;
   const PLAYER_COLORS = [
     '#1565c0','#c62828','#2e7d32','#e65100',
     '#6a1b9a','#00838f','#f9a825','#ad1457','#37474f'
@@ -36,7 +36,8 @@
   let pendingRoll = null;
 
   function defaultStats(pos=1) {
-    return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH, items:Array(6).fill(null), job:null, route:null };
+    return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
+             items:Array(6).fill(null), job:null, route:null };
   }
   function clampStats(st) {
     return { ...st,
@@ -54,14 +55,26 @@
   }
 
   function perp(angle) { return { nx: -Math.sin(angle), ny: Math.cos(angle) }; }
-  function lerp(a, b, t) { return { x: a.x + (b.x-a.x)*t, y: a.y + (b.y-a.y)*t }; }
+  function lerp(a, b, t) { return { x: a.x+(b.x-a.x)*t, y: a.y+(b.y-a.y)*t }; }
 
-  function quadPath(corners) {
+  // Rounded-corner quadrilateral path
+  function tilePath(corners) {
+    const r = Math.max(2, SQ_ACROSS * 0.16);
     ctx.beginPath();
-    ctx.moveTo(corners[0].x, corners[0].y);
-    ctx.lineTo(corners[1].x, corners[1].y);
-    ctx.lineTo(corners[2].x, corners[2].y);
-    ctx.lineTo(corners[3].x, corners[3].y);
+    for (let i = 0; i < 4; i++) {
+      const c  = corners[i];
+      const cp = corners[(i+3)%4];
+      const cn = corners[(i+1)%4];
+      const dpx = cp.x-c.x, dpy = cp.y-c.y;
+      const dnx = cn.x-c.x, dny = cn.y-c.y;
+      const lp = Math.sqrt(dpx*dpx+dpy*dpy)||1;
+      const ln = Math.sqrt(dnx*dnx+dny*dny)||1;
+      const rr = Math.min(r, lp*0.42, ln*0.42);
+      const p1x = c.x+dpx/lp*rr, p1y = c.y+dpy/lp*rr;
+      const p2x = c.x+dnx/ln*rr, p2y = c.y+dny/ln*rr;
+      if (i===0) ctx.moveTo(p1x,p1y); else ctx.lineTo(p1x,p1y);
+      ctx.quadraticCurveTo(c.x,c.y, p2x,p2y);
+    }
     ctx.closePath();
   }
 
@@ -73,52 +86,49 @@
       const dx = WAYPOINTS[i][0]-WAYPOINTS[i-1][0], dy = WAYPOINTS[i][1]-WAYPOINTS[i-1][1];
       segLens.push(Math.sqrt(dx*dx+dy*dy)); total += segLens[segLens.length-1];
     }
-    // Square tiles: perpendicular width = along-path height
-    SQ_ALONG = total / 99;
+    // Square tiles: both dimensions equal the along-path spacing
+    SQ_ALONG  = total / 99;
     SQ_ACROSS = SQ_ALONG;
-    ROAD_W = SQ_ACROSS + 22;
+    ROAD_W    = SQ_ACROSS + 8;   // slim road — just a thin border around tiles
     const spacing = SQ_ALONG;
 
     const pts = [];
     for (let n = 0; n < 100; n++) {
       const target = n * spacing;
       let traveled = 0, seg = 0;
-      while (seg < segLens.length-1 && traveled + segLens[seg] < target) traveled += segLens[seg++];
-      const t = segLens[seg] > 0 ? Math.min((target - traveled) / segLens[seg], 1) : 0;
-      const p0 = WAYPOINTS[seg], p1 = WAYPOINTS[Math.min(seg+1, WAYPOINTS.length-1)];
+      while (seg < segLens.length-1 && traveled+segLens[seg] < target) traveled += segLens[seg++];
+      const t = segLens[seg]>0 ? Math.min((target-traveled)/segLens[seg],1) : 0;
+      const p0 = WAYPOINTS[seg], p1 = WAYPOINTS[Math.min(seg+1,WAYPOINTS.length-1)];
       pts.push({
-        cx: p0[0] + (p1[0]-p0[0]) * t,
-        cy: p0[1] + (p1[1]-p0[1]) * t,
+        cx: p0[0]+(p1[0]-p0[0])*t,
+        cy: p0[1]+(p1[1]-p0[1])*t,
         angle: Math.atan2(p1[1]-p0[1], p1[0]-p0[0])
       });
     }
 
     const bounds = [];
-    { const p = perp(pts[0].angle); bounds.push({ x: pts[0].cx, y: pts[0].cy, nx: p.nx, ny: p.ny }); }
-    for (let i = 1; i <= 99; i++) {
-      const mx = (pts[i-1].cx + pts[i].cx) / 2;
-      const my = (pts[i-1].cy + pts[i].cy) / 2;
-      const angle = Math.atan2(pts[i].cy - pts[i-1].cy, pts[i].cx - pts[i-1].cx);
-      const p = perp(angle);
-      bounds.push({ x: mx, y: my, nx: p.nx, ny: p.ny });
+    { const p=perp(pts[0].angle); bounds.push({x:pts[0].cx,y:pts[0].cy,nx:p.nx,ny:p.ny}); }
+    for (let i=1; i<=99; i++) {
+      const mx=(pts[i-1].cx+pts[i].cx)/2, my=(pts[i-1].cy+pts[i].cy)/2;
+      const angle=Math.atan2(pts[i].cy-pts[i-1].cy, pts[i].cx-pts[i-1].cx);
+      const p=perp(angle);
+      bounds.push({x:mx,y:my,nx:p.nx,ny:p.ny});
     }
-    { const p = perp(pts[99].angle); bounds.push({ x: pts[99].cx, y: pts[99].cy, nx: p.nx, ny: p.ny }); }
+    { const p=perp(pts[99].angle); bounds.push({x:pts[99].cx,y:pts[99].cy,nx:p.nx,ny:p.ny}); }
 
     const sqs = [];
-    for (let n = 0; n < 100; n++) {
-      const num = n + 1;
-      const isStop = FORCED_STOPS.includes(num);
-      const isGoal = num === 100;
-      const half_h = isGoal ? SQ_ACROSS * 0.75 : isStop ? SQ_ACROSS * 0.68 : SQ_ACROSS / 2;
-      const L = bounds[n], R = bounds[n+1];
+    for (let n=0; n<100; n++) {
+      const num=n+1;
+      const isStop=FORCED_STOPS.includes(num), isGoal=num===100;
+      const half_h = isGoal?SQ_ACROSS*0.75 : isStop?SQ_ACROSS*0.68 : SQ_ACROSS/2;
+      const L=bounds[n], R=bounds[n+1];
       sqs.push({
-        num,
-        cx: pts[n].cx, cy: pts[n].cy,
-        corners: [
-          { x: L.x + L.nx * half_h, y: L.y + L.ny * half_h },
-          { x: R.x + R.nx * half_h, y: R.y + R.ny * half_h },
-          { x: R.x - R.nx * half_h, y: R.y - R.ny * half_h },
-          { x: L.x - L.nx * half_h, y: L.y - L.ny * half_h },
+        num, cx:pts[n].cx, cy:pts[n].cy,
+        corners:[
+          {x:L.x+L.nx*half_h, y:L.y+L.ny*half_h},
+          {x:R.x+R.nx*half_h, y:R.y+R.ny*half_h},
+          {x:R.x-R.nx*half_h, y:R.y-R.ny*half_h},
+          {x:L.x-L.nx*half_h, y:L.y-L.ny*half_h},
         ]
       });
     }
@@ -126,82 +136,94 @@
   }
 
   const branchSquares = (function() {
-    const sq20 = squares[BRANCH_START - 1];
-    const sq30 = squares[BRANCH_END - 1];
-    const cx20 = sq20.cx, cy20 = sq20.cy;
-    const cx30 = sq30.cx, cy30 = sq30.cy;
+    const sq20=squares[BRANCH_START-1], sq30=squares[BRANCH_END-1];
+    const cx20=sq20.cx, cy20=sq20.cy, cx30=sq30.cx, cy30=sq30.cy;
 
-    const job = squares.slice(BRANCH_START, BRANCH_END - 1).map(sq => ({ ...sq, route: 'job' }));
+    const job = squares.slice(BRANCH_START, BRANCH_END-1).map(sq=>({...sq,route:'job'}));
 
-    const cpx = (cx20 + cx30) / 2 - Math.abs(cy20 - cy30) * 1.4;
-    const cpy = (cy20 + cy30) / 2 + (cy20 - cy30) * 0.1;
+    // Road angles at the junction squares
+    const sq19=squares[BRANCH_START-2], sq31=squares[BRANCH_END];
+    const a20=Math.atan2(cy20-sq19.cy, cx20-sq19.cx);
+    const a30=Math.atan2(sq31.cy-cy30, sq31.cx-cx30);
+
+    // Perpendicular toward canvas center — gives clean S-curve exit/entry
+    function perpToCenter(angle, px, py) {
+      const cwx=Math.sin(angle), cwy=-Math.cos(angle);
+      const dot=cwx*(CW/2-px)+cwy*(CH/2-py);
+      return dot>=0 ? {px:cwx,py:cwy} : {px:-cwx,py:-cwy};
+    }
+    const p20=perpToCenter(a20,cx20,cy20);
+    const p30=perpToCenter(a30,cx30,cy30);
+
+    const chordLen=Math.sqrt((cx30-cx20)**2+(cy30-cy20)**2);
+    const exitLen=chordLen*0.58;
+    const cp1x=cx20+p20.px*exitLen, cp1y=cy20+p20.py*exitLen;
+    const cp2x=cx30+p30.px*exitLen, cp2y=cy30+p30.py*exitLen;
 
     function bezierPt(t) {
+      const u=1-t;
       return {
-        x: (1-t)*(1-t)*cx20 + 2*(1-t)*t*cpx + t*t*cx30,
-        y: (1-t)*(1-t)*cy20 + 2*(1-t)*t*cpy + t*t*cy30
+        x: u*u*u*cx20+3*u*u*t*cp1x+3*u*t*t*cp2x+t*t*t*cx30,
+        y: u*u*u*cy20+3*u*u*t*cp1y+3*u*t*t*cp2y+t*t*t*cy30
       };
     }
 
-    const SAMPLES = 600;
-    const arcSamples = [{ t: 0, len: 0 }];
-    let arcTotal = 0;
-    for (let i = 1; i <= SAMPLES; i++) {
-      const t0 = (i-1)/SAMPLES, t1 = i/SAMPLES;
-      const p0 = bezierPt(t0), p1 = bezierPt(t1);
-      arcTotal += Math.sqrt((p1.x-p0.x)**2 + (p1.y-p0.y)**2);
-      arcSamples.push({ t: t1, len: arcTotal });
+    const SAMPLES=600;
+    const arc=[{t:0,len:0}]; let arcTotal=0;
+    for (let i=1;i<=SAMPLES;i++) {
+      const p0=bezierPt((i-1)/SAMPLES), p1=bezierPt(i/SAMPLES);
+      arcTotal+=Math.sqrt((p1.x-p0.x)**2+(p1.y-p0.y)**2);
+      arc.push({t:i/SAMPLES,len:arcTotal});
     }
     function tAtLen(len) {
-      let lo = 0, hi = arcSamples.length - 1;
-      while (lo < hi - 1) { const mid = (lo+hi)>>1; if (arcSamples[mid].len < len) lo=mid; else hi=mid; }
-      const a = arcSamples[lo], b = arcSamples[hi];
-      return b.len===a.len ? a.t : a.t + (b.t-a.t)*(len-a.len)/(b.len-a.len);
+      let lo=0,hi=arc.length-1;
+      while(lo<hi-1){const mid=(lo+hi)>>1;arc[mid].len<len?lo=mid:hi=mid;}
+      const a=arc[lo],b=arc[hi];
+      return b.len===a.len?a.t:a.t+(b.t-a.t)*(len-a.len)/(b.len-a.len);
     }
 
-    const steps = BRANCH_END - BRANCH_START;
-    const uniSpacing = arcTotal / steps;
+    const steps=BRANCH_END-BRANCH_START, uniSpacing=arcTotal/steps;
+    const allPts=[{cx:cx20,cy:cy20}];
+    for (let i=1;i<steps;i++) { const pt=bezierPt(tAtLen(i*uniSpacing)); allPts.push({cx:pt.x,cy:pt.y}); }
+    allPts.push({cx:cx30,cy:cy30});
 
-    const allPts = [{ cx: cx20, cy: cy20 }];
-    for (let i = 1; i < steps; i++) {
-      const pt = bezierPt(tAtLen(i * uniSpacing));
-      allPts.push({ cx: pt.x, cy: pt.y });
-    }
-    allPts.push({ cx: cx30, cy: cy30 });
-
-    const bounds = [];
-    for (let i = 0; i <= 9; i++) {
-      const mx = (allPts[i].cx + allPts[i+1].cx) / 2;
-      const my = (allPts[i].cy + allPts[i+1].cy) / 2;
-      const angle = Math.atan2(allPts[i+1].cy - allPts[i].cy, allPts[i+1].cx - allPts[i].cx);
-      const p = perp(angle);
-      bounds.push({ x: mx, y: my, nx: p.nx, ny: p.ny });
+    const bounds=[];
+    for (let i=0;i<=9;i++) {
+      const mx=(allPts[i].cx+allPts[i+1].cx)/2, my=(allPts[i].cy+allPts[i+1].cy)/2;
+      const angle=Math.atan2(allPts[i+1].cy-allPts[i].cy, allPts[i+1].cx-allPts[i].cx);
+      const p=perp(angle);
+      bounds.push({x:mx,y:my,nx:p.nx,ny:p.ny});
     }
 
-    const half_h = SQ_ACROSS / 2;
-    const uni = [];
-    for (let i = 0; i < 9; i++) {
-      const L = bounds[i], R = bounds[i+1];
+    const half_h=SQ_ACROSS/2;
+    const uni=[];
+    for (let i=0;i<9;i++) {
+      const L=bounds[i],R=bounds[i+1];
       uni.push({
-        num: BRANCH_START + i + 1,
-        cx: allPts[i+1].cx, cy: allPts[i+1].cy,
-        corners: [
-          { x: L.x + L.nx * half_h, y: L.y + L.ny * half_h },
-          { x: R.x + R.nx * half_h, y: R.y + R.ny * half_h },
-          { x: R.x - R.nx * half_h, y: R.y - R.ny * half_h },
-          { x: L.x - L.nx * half_h, y: L.y - L.ny * half_h },
+        num:BRANCH_START+i+1, cx:allPts[i+1].cx, cy:allPts[i+1].cy,
+        corners:[
+          {x:L.x+L.nx*half_h,y:L.y+L.ny*half_h},
+          {x:R.x+R.nx*half_h,y:R.y+R.ny*half_h},
+          {x:R.x-R.nx*half_h,y:R.y-R.ny*half_h},
+          {x:L.x-L.nx*half_h,y:L.y-L.ny*half_h},
         ],
-        route: 'uni'
+        route:'uni'
       });
     }
 
-    return { job, uni, cpx, cpy, cx20, cy20, cx30, cy30 };
+    // Arc peak (t=0.5) and outward bow direction for label placement
+    const peakX=0.125*cx20+0.375*cp1x+0.375*cp2x+0.125*cx30;
+    const peakY=0.125*cy20+0.375*cp1y+0.375*cp2y+0.125*cy30;
+    const abx=(p20.px+p30.px)/2, aby=(p20.py+p30.py)/2;
+    const abl=Math.sqrt(abx*abx+aby*aby)||1;
+    const bx=abx/abl, by=aby/abl;
+
+    return {job,uni,cp1x,cp1y,cp2x,cp2y,cx20,cy20,cx30,cy30,bx,by,peakX,peakY};
   })();
 
-  function getBranchSq(pos, route) {
-    if (pos > BRANCH_START && pos < BRANCH_END && route) {
-      return (branchSquares[route] || []).find(s => s.num === pos) || null;
-    }
+  function getBranchSq(pos,route) {
+    if(pos>BRANCH_START&&pos<BRANCH_END&&route)
+      return (branchSquares[route]||[]).find(s=>s.num===pos)||null;
     return null;
   }
 
@@ -212,14 +234,13 @@
   function showScreen(id){SCREENS.forEach(sid=>{const el=$(sid);if(sid===id)fadeIn(el);else if(!el.classList.contains('hidden'))fadeOut(el);});}
 
   $('btn-go').addEventListener('click',()=>showScreen('word-screen'));
-
   const nameInput=$('name-input'),wordInput=$('word-input'),wordError=$('word-error');
   $('btn-create').addEventListener('click',enterRoom);
   nameInput.addEventListener('keydown',e=>e.key==='Enter'&&wordInput.focus());
   wordInput.addEventListener('keydown',e=>e.key==='Enter'&&enterRoom());
 
   async function enterRoom() {
-    if (!isConfigured){wordError.innerHTML='Supabaseが未設定です。<br>config.jsを書き換えてください。';return;}
+    if(!isConfigured){wordError.innerHTML='Supabaseが未設定です。<br>config.jsを書き換えてください。';return;}
     const name=nameInput.value.trim(),word=wordInput.value.trim();
     if(!name){wordError.textContent='名前を入力してください';nameInput.focus();return;}
     if(!word){wordError.textContent='あいことばを入力してください';wordInput.focus();return;}
@@ -246,7 +267,7 @@
       const {data:ep}=await sb.from('room_players').select('player_id,color').eq('room_id',roomId);
       const existingPlayers=ep||[];
       const alreadyIn=existingPlayers.some(p=>p.player_id===myId);
-      if(!alreadyIn && existingPlayers.length>=MAX_PLAYERS){
+      if(!alreadyIn&&existingPlayers.length>=MAX_PLAYERS){
         wordError.textContent=`このルームは満員です（最大${MAX_PLAYERS}人）`;
         return;
       }
@@ -355,12 +376,12 @@
   function renderPlayerStatusCards(activeIdx){
     $('player-status-area').innerHTML=players.map((p,i)=>{
       const st=getStats(playerData[p.player_id]);
-      const routeLabel = st.route==='job'?' 💼就職':st.route==='uni'?' 🎓大学':'';
+      const routeLabel=st.route==='job'?' 💼就職':st.route==='uni'?' 🎓大学':'';
       const jobLabel=(st.job||'未定')+routeLabel;
       const isMine=p.player_id===myId;
       const itemsHtml=st.items.map(item=>
-        item ? `<div class="item-slot filled" title="${item}">${item}</div>`
-             : `<div class="item-slot">∅</div>`
+        item?`<div class="item-slot filled" title="${item}">${item}</div>`
+            :`<div class="item-slot">∅</div>`
       ).join('');
       return `
         <div class="psc${i===activeIdx?' psc-active':''}${isMine?' psc-mine':''}">
@@ -380,52 +401,48 @@
     }).join('');
   }
 
-  $('btn-roll').addEventListener('click', async () => {
-    if (!isMyTurn || rolling) return;
-    rolling = true;
-    $('btn-roll').disabled = true;
-    const roll = Math.floor(Math.random() * 6) + 1;
+  $('btn-roll').addEventListener('click',async()=>{
+    if(!isMyTurn||rolling)return;
+    rolling=true; $('btn-roll').disabled=true;
+    const roll=Math.floor(Math.random()*6)+1;
     await animateDice(roll);
-    const st = getStats(playerData[myId]);
-    const newPos = calcLanding(st.pos, roll);
-
-    if (newPos === BRANCH_START && !st.route) {
-      pendingRoll = { st, newPos };
+    const st=getStats(playerData[myId]);
+    const newPos=calcLanding(st.pos,roll);
+    if(newPos===BRANCH_START&&!st.route){
+      pendingRoll={st,newPos};
       $('route-overlay').classList.remove('hidden');
       return;
     }
-
-    if (FORCED_STOPS.includes(newPos) && newPos !== st.pos + roll) showStopMessage(newPos);
-    const newRoute = (st.route && newPos >= BRANCH_END) ? null : (st.route || null);
-    await saveRoll(st, newPos, newRoute);
+    if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
+    const newRoute=(st.route&&newPos>=BRANCH_END)?null:(st.route||null);
+    await saveRoll(st,newPos,newRoute);
   });
 
-  async function saveRoll(st, newPos, route) {
-    const newData = { ...playerData, [myId]: clampStats({ ...st, pos: newPos, route: route || null }) };
-    const nextIndex = (currentPlayerIndex + 1) % players.length;
+  async function saveRoll(st,newPos,route){
+    const newData={...playerData,[myId]:clampStats({...st,pos:newPos,route:route||null})};
+    const nextIndex=(currentPlayerIndex+1)%players.length;
     await sb.from('rooms').update({
-      alive_cells: newData,
-      current_player_index: nextIndex,
-      turn_number: nextIndex === 0 ? turnNumber + 1 : turnNumber,
-    }).eq('id', roomId);
+      alive_cells:newData,
+      current_player_index:nextIndex,
+      turn_number:nextIndex===0?turnNumber+1:turnNumber,
+    }).eq('id',roomId);
   }
 
-  $('btn-route-job').addEventListener('click', async () => {
+  $('btn-route-job').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
-    if (!pendingRoll) return;
-    const { st, newPos } = pendingRoll; pendingRoll = null;
-    await saveRoll(st, newPos, 'job');
+    if(!pendingRoll)return;
+    const {st,newPos}=pendingRoll; pendingRoll=null;
+    await saveRoll(st,newPos,'job');
   });
-
-  $('btn-route-uni').addEventListener('click', async () => {
+  $('btn-route-uni').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
-    if (!pendingRoll) return;
-    const { st, newPos } = pendingRoll; pendingRoll = null;
-    await saveRoll(st, newPos, 'uni');
+    if(!pendingRoll)return;
+    const {st,newPos}=pendingRoll; pendingRoll=null;
+    await saveRoll(st,newPos,'uni');
   });
 
   function showStopMessage(pos){
-    $('dice-result').textContent += `　★ ${pos}マスで強制ストップ！`;
+    $('dice-result').textContent+=`　★ ${pos}マスで強制ストップ！`;
   }
 
   const DICE_FACE=['⚀','⚁','⚂','⚃','⚄','⚅'];
@@ -442,135 +459,137 @@
     drawUniBranchRoad();
     drawRoad();
     drawBranchLabels();
-    squares.forEach(sq => {
-      if (sq.num > BRANCH_START && sq.num < BRANCH_END) return;
+    squares.forEach(sq=>{
+      if(sq.num>BRANCH_START&&sq.num<BRANCH_END)return;
       drawSquare(sq);
     });
-    branchSquares.job.forEach(sq => drawBranchSquare(sq));
-    branchSquares.uni.forEach(sq => drawBranchSquare(sq));
+    branchSquares.job.forEach(sq=>drawBranchSquare(sq));
+    branchSquares.uni.forEach(sq=>drawBranchSquare(sq));
     drawTokens();
   }
 
   function drawUniBranchRoad(){
-    const {cpx, cpy, cx20, cy20, cx30, cy30} = branchSquares;
+    const {cp1x,cp1y,cp2x,cp2y,cx20,cy20,cx30,cy30}=branchSquares;
     ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
     function bezier(){
-      ctx.beginPath(); ctx.moveTo(cx20, cy20);
-      ctx.quadraticCurveTo(cpx, cpy, cx30, cy30);
+      ctx.beginPath(); ctx.moveTo(cx20,cy20);
+      ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,cx30,cy30);
     }
-    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; bezier(); ctx.stroke();
+    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.32)'; bezier(); ctx.stroke();
     ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#c8a060';              bezier(); ctx.stroke();
     ctx.lineWidth=ROAD_W;    ctx.strokeStyle='#ddb870';              bezier(); ctx.stroke();
-    ctx.lineWidth=ROAD_W-14; ctx.strokeStyle='rgba(255,235,180,0.35)'; bezier(); ctx.stroke();
-    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.setLineDash([18,22]);
+    ctx.lineWidth=ROAD_W-8;  ctx.strokeStyle='rgba(255,240,190,0.4)'; bezier(); ctx.stroke();
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.setLineDash([12,16]);
     bezier(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
 
   function drawBranchLabels(){
-    const j0 = branchSquares.job[4];
-    const u0 = branchSquares.uni[4];
-    if (!j0 || !u0) return;
+    const j0=branchSquares.job[4];
+    if(!j0)return;
+    const {peakX,peakY,bx,by}=branchSquares;
     ctx.save();
     ctx.font='bold 11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    const labelOff = SQ_ACROSS * 0.9;
-    const jx = j0.cx, jy = j0.cy - labelOff;
-    ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(jx-46,jy-10,92,20,6); ctx.fill();
-    ctx.fillStyle='#b05010'; ctx.fillText('💼 就職ルート', jx, jy);
-    const ux = u0.cx, uy = u0.cy - labelOff;
-    ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
-    ctx.fillStyle='#1030b0'; ctx.fillText('🎓 大学ルート', ux, uy);
+
+    // Job label: above middle job square
+    const jx=j0.cx, jy=j0.cy-SQ_ACROSS*0.95;
+    ctx.fillStyle='rgba(255,255,255,0.88)';
+    ctx.beginPath(); ctx.roundRect(jx-46,jy-10,92,20,6); ctx.fill();
+    ctx.fillStyle='#b05010'; ctx.fillText('💼 就職ルート',jx,jy);
+
+    // Uni label: at bezier arc peak, offset outward
+    const ux=peakX+bx*SQ_ACROSS*1.1, uy=peakY+by*SQ_ACROSS*1.1;
+    ctx.fillStyle='rgba(230,235,255,0.92)';
+    ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
+    ctx.fillStyle='#1030b0'; ctx.fillText('🎓 大学ルート',ux,uy);
     ctx.restore();
   }
 
-  function quadGrad(num, corners, isJob, isUni) {
-    const tx = (corners[0].x + corners[1].x) / 2;
-    const ty = (corners[0].y + corners[1].y) / 2;
-    const bx = (corners[2].x + corners[3].x) / 2;
-    const by = (corners[2].y + corners[3].y) / 2;
-    const g = ctx.createLinearGradient(tx, ty, bx, by);
-    if (isJob)                         {g.addColorStop(0,'#fff3d8');g.addColorStop(1,'#f0c870');}
-    else if (isUni)                    {g.addColorStop(0,'#e4eaff');g.addColorStop(1,'#a0b8f8');}
-    else if(num===1)                   {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
-    else if(num===100)                 {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
+  function tileGrad(num,corners,isJob,isUni){
+    const tx=(corners[0].x+corners[1].x)/2, ty=(corners[0].y+corners[1].y)/2;
+    const bx=(corners[2].x+corners[3].x)/2, by=(corners[2].y+corners[3].y)/2;
+    const g=ctx.createLinearGradient(tx,ty,bx,by);
+    if(isJob)                         {g.addColorStop(0,'#fff3d8');g.addColorStop(1,'#f0c870');}
+    else if(isUni)                    {g.addColorStop(0,'#e4eaff');g.addColorStop(1,'#a0b8f8');}
+    else if(num===1)                  {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
+    else if(num===100)                {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
     else if(FORCED_STOPS.includes(num)){g.addColorStop(0,'#ffe0e0');g.addColorStop(1,'#f08888');}
-    else if(num%10===0)                {g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
-    else if(num%5===0)                 {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
-    else                               {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
+    else if(num%10===0)               {g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
+    else if(num%5===0)                {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
+    else                              {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
     return g;
   }
-  function squareBorder(num){
+  function tileBorder(num){
     if(num===1)return'#2a8a40'; if(num===100)return'#c89000';
     if(FORCED_STOPS.includes(num))return'#c02020';
     if(num%10===0)return'#d06020'; if(num%5===0)return'#3a80c0'; return'#b89860';
   }
 
-  function drawSquare({num, cx, cy, corners}){
-    const isGoal=num===100, isStart=num===1, isStop=FORCED_STOPS.includes(num);
-    const h = SQ_ACROSS;  // use current dynamic value for font/position scaling
+  function drawSquare({num,cx,cy,corners}){
+    const isGoal=num===100,isStart=num===1,isStop=FORCED_STOPS.includes(num);
+    const h=SQ_ACROSS;
+    const fs =Math.max(8, Math.round(h*0.28));
+    const fsB=Math.max(9, Math.round(h*0.30));
+    const fsE=Math.max(12,Math.round(h*0.38));
+    const dy =h*0.20;
 
     ctx.save();
-    ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
-    ctx.fillStyle = quadGrad(num, corners, false, false);
-    quadPath(corners); ctx.fill();
+    ctx.shadowColor='rgba(0,0,0,0.15)'; ctx.shadowBlur=5; ctx.shadowOffsetY=2;
+    ctx.fillStyle=tileGrad(num,corners,false,false);
+    tilePath(corners); ctx.fill();
     ctx.restore();
 
-    ctx.strokeStyle = squareBorder(num);
-    ctx.lineWidth = isGoal||isStart||isStop ? 2.5 : 1.5;
-    quadPath(corners); ctx.stroke();
+    ctx.strokeStyle=tileBorder(num);
+    ctx.lineWidth=isGoal||isStart||isStop?2:1.2;
+    tilePath(corners); ctx.stroke();
 
-    ctx.save();
-    ctx.globalAlpha = 0.32; ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    // Gloss highlight (top 35%)
+    ctx.save(); ctx.globalAlpha=0.28; ctx.fillStyle='rgba(255,255,255,0.9)';
     ctx.beginPath();
-    ctx.moveTo(corners[0].x, corners[0].y);
-    ctx.lineTo(corners[1].x, corners[1].y);
-    ctx.lineTo(lerp(corners[1], corners[2], 0.35).x, lerp(corners[1], corners[2], 0.35).y);
-    ctx.lineTo(lerp(corners[0], corners[3], 0.35).x, lerp(corners[0], corners[3], 0.35).y);
+    ctx.moveTo(corners[0].x,corners[0].y);
+    ctx.lineTo(corners[1].x,corners[1].y);
+    ctx.lineTo(lerp(corners[1],corners[2],0.35).x,lerp(corners[1],corners[2],0.35).y);
+    ctx.lineTo(lerp(corners[0],corners[3],0.35).x,lerp(corners[0],corners[3],0.35).y);
     ctx.closePath(); ctx.fill();
     ctx.restore();
-
-    const fs  = Math.max(8,  Math.round(h * 0.28));  // normal font size
-    const fsB = Math.max(9,  Math.round(h * 0.30));  // bold font size
-    const fsE = Math.max(12, Math.round(h * 0.38));  // emoji font size
-    const dy  = h * 0.20;                             // line offset
 
     ctx.textAlign='center'; ctx.textBaseline='middle';
     if(isGoal){
       ctx.fillStyle='#8a6000';
-      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('GOAL', cx, cy - dy);
-      ctx.font=`${fsE}px serif`;          ctx.fillText('🏆', cx, cy + dy);
+      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('GOAL',cx,cy-dy);
+      ctx.font=`${fsE}px serif`;          ctx.fillText('🏆',cx,cy+dy);
     } else if(isStart){
       ctx.fillStyle='#1a6030';
-      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('START', cx, cy);
+      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('START',cx,cy);
     } else if(isStop){
       ctx.fillStyle='#a00000';
-      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('★STOP', cx, cy - dy * 0.75);
-      ctx.fillText(num, cx, cy + dy * 0.75);
+      ctx.font=`bold ${fsB}px Segoe UI`;
+      ctx.fillText('★STOP',cx,cy-dy*0.7);
+      ctx.fillText(num,cx,cy+dy*0.7);
     } else {
-      ctx.fillStyle = num%10===0?'#c05010': num%5===0?'#1a60a0': '#7a6040';
-      ctx.font = num%10===0 ? `bold ${fsB}px Segoe UI` : `${fs}px Segoe UI`;
-      ctx.fillText(num, cx, cy);
+      ctx.fillStyle=num%10===0?'#c05010':num%5===0?'#1a60a0':'#7a6040';
+      ctx.font=num%10===0?`bold ${fsB}px Segoe UI`:`${fs}px Segoe UI`;
+      ctx.fillText(num,cx,cy);
     }
   }
 
-  function drawBranchSquare({num, cx, cy, corners, route}){
-    const isJob = route==='job';
-    const h = SQ_ACROSS;
-    const fs = Math.max(8, Math.round(h * 0.28));
+  function drawBranchSquare({num,cx,cy,corners,route}){
+    const isJob=route==='job';
+    const fs=Math.max(8,Math.round(SQ_ACROSS*0.28));
 
     ctx.save();
-    ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
-    ctx.fillStyle = quadGrad(num, corners, isJob, !isJob);
-    quadPath(corners); ctx.fill();
+    ctx.shadowColor='rgba(0,0,0,0.15)'; ctx.shadowBlur=5; ctx.shadowOffsetY=2;
+    ctx.fillStyle=tileGrad(num,corners,isJob,!isJob);
+    tilePath(corners); ctx.fill();
     ctx.restore();
 
-    ctx.strokeStyle = isJob ? '#c06810' : '#2840b8';
-    ctx.lineWidth = 1.5;
-    quadPath(corners); ctx.stroke();
+    ctx.strokeStyle=isJob?'#c06810':'#2840b8';
+    ctx.lineWidth=1.2;
+    tilePath(corners); ctx.stroke();
 
-    ctx.fillStyle = isJob ? '#904010' : '#1830a0';
+    ctx.fillStyle=isJob?'#904010':'#1830a0';
     ctx.font=`${fs}px Segoe UI`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(num, cx, cy);
+    ctx.fillText(num,cx,cy);
   }
 
   function drawSky(){
@@ -600,7 +619,7 @@
     ctx.lineTo(CW,CH); ctx.closePath(); ctx.fillStyle=fillColor; ctx.fill();
     if(snowLine){
       ctx.beginPath();
-      peaks.forEach(([px,py])=>{ if(py<snowLine){const s=40;ctx.moveTo(px-s,py+30);ctx.lineTo(px,py-4);ctx.lineTo(px+s,py+30);} });
+      peaks.forEach(([px,py])=>{if(py<snowLine){const s=40;ctx.moveTo(px-s,py+30);ctx.lineTo(px,py-4);ctx.lineTo(px+s,py+30);}});
       ctx.fillStyle='rgba(255,255,255,0.75)'; ctx.fill();
     }
     ctx.restore();
@@ -614,12 +633,12 @@
   }
   function drawRoad(){
     ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
-    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; traceWay(); ctx.stroke();
+    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.32)'; traceWay(); ctx.stroke();
     ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#c8a060';              traceWay(); ctx.stroke();
     ctx.lineWidth=ROAD_W;    ctx.strokeStyle='#ddb870';              traceWay(); ctx.stroke();
-    ctx.lineWidth=ROAD_W-14; ctx.strokeStyle='rgba(255,235,180,0.35)'; traceWay(); ctx.stroke();
+    ctx.lineWidth=ROAD_W-8;  ctx.strokeStyle='rgba(255,240,190,0.4)'; traceWay(); ctx.stroke();
     ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)';
-    ctx.setLineDash([18,22]); traceWay(); ctx.stroke(); ctx.setLineDash([]);
+    ctx.setLineDash([12,16]); traceWay(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
   function traceWay(){ctx.beginPath();WAYPOINTS.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));}
@@ -628,8 +647,8 @@
     const byKey={};
     players.forEach(p=>{
       const st=getStats(playerData[p.player_id]);
-      const bsq=getBranchSq(st.pos, st.route);
-      const sq=bsq || squares[st.pos-1];
+      const bsq=getBranchSq(st.pos,st.route);
+      const sq=bsq||squares[st.pos-1];
       if(!sq)return;
       const key=`${st.pos}-${st.route||'main'}`;
       (byKey[key]=byKey[key]||[]).push({p,sq});
