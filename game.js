@@ -37,7 +37,7 @@
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
-             items:Array(6).fill(null), job:null, route:null };
+             items:Array(6).fill(null), job:null, route:null, finished:false };
   }
   function clampStats(st) {
     return { ...st,
@@ -334,13 +334,14 @@
 
   async function onRoomChange(room){
     if(!room)return;
-    if(room.status==='playing'){
+    if(room.status==='playing'||room.status==='finished'){
       const {data}=await sb.from('room_players').select('*').eq('room_id',roomId).order('joined_at');
       players=data||[];
       if($('game-screen').classList.contains('hidden')){
         $('room-badge').textContent='ルーム: '+roomId;
         applyRoomState(room); showScreen('game-screen');
       } else {applyRoomState(room);}
+      if(room.status==='finished') showResultScreen();
     }
   }
 
@@ -371,8 +372,9 @@
     const ind=$('turn-indicator');
     if(isMyTurn){ind.textContent='あなたのターンです！';ind.style.color='#228844';}
     else{ind.textContent=(cp?.player_name||'?')+' のターン';ind.style.color=cp?.color||'#1565c0';}
+    const myFinished=!!getStats(playerData[myId]).finished;
     const rb=$('btn-roll');
-    rb.style.display=isMyTurn?'block':'none';rb.disabled=false;rolling=false;
+    rb.style.display=(isMyTurn&&!myFinished)?'block':'none';rb.disabled=false;rolling=false;
     $('turn-number').textContent=turnNumber;
     renderPlayerStatusCards(idx);
   }
@@ -392,7 +394,7 @@
           <div class="psc-header">
             <span class="psc-dot" style="background:${p.color}"></span>
             <span class="psc-name">${p.player_name}${p.is_host?' 👑':''}${isMine?' <span class="psc-self">自分</span>':''}</span>
-            <span class="psc-job">💼 ${jobLabel}</span>
+            ${st.finished?'<span class="psc-goal">🏆ゴール</span>':'<span class="psc-job">💼 '+jobLabel+'</span>'}
           </div>
           <div class="psc-stats">
             <span class="psc-stat">💰 <span class="psc-stat-val">${st.money}万円</span></span>
@@ -423,12 +425,34 @@
   });
 
   async function saveRoll(st,newPos,route){
-    const newData={...playerData,[myId]:clampStats({...st,pos:newPos,route:route||null})};
-    const nextIndex=(currentPlayerIndex+1)%players.length;
+    const isGoal=newPos===100;
+    if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
+    const newSt=clampStats({...st, pos:newPos,
+      route:isGoal?null:(route||null),
+      finished:isGoal||!!st.finished});
+    const newData={...playerData,[myId]:newSt};
+
+    // ゲーム終了判定：(人数-1)人がゴールしたら終了
+    const finishedCount=players.filter(p=>getStats(newData[p.player_id]).finished).length;
+    if(players.length>1&&finishedCount>=players.length-1){
+      await sb.from('rooms').update({
+        alive_cells:newData, status:'finished',
+        current_player_index:currentPlayerIndex, turn_number:turnNumber,
+      }).eq('id',roomId);
+      return;
+    }
+
+    // ゴール済みプレイヤーをスキップして次のプレイヤーを探す
+    let nextIndex=(currentPlayerIndex+1)%players.length;
+    for(let i=0;i<players.length;i++){
+      if(!getStats(newData[players[nextIndex].player_id]).finished) break;
+      nextIndex=(nextIndex+1)%players.length;
+    }
+    const wrapped=nextIndex<=currentPlayerIndex;
     await sb.from('rooms').update({
       alive_cells:newData,
       current_player_index:nextIndex,
-      turn_number:nextIndex===0?turnNumber+1:turnNumber,
+      turn_number:wrapped?turnNumber+1:turnNumber,
     }).eq('id',roomId);
   }
 
@@ -679,6 +703,35 @@
     const a=(i/total)*Math.PI*2-Math.PI/2;
     return{x:Math.cos(a)*16,y:Math.sin(a)*16};
   }
+
+  function showResultScreen(){
+    // 順位：ゴール済み → pos降順
+    const ranked=[...players].sort((a,b)=>{
+      const sa=getStats(playerData[a.player_id]);
+      const sb2=getStats(playerData[b.player_id]);
+      if(sa.finished!==sb2.finished) return sa.finished?-1:1;
+      return sb2.pos-sa.pos;
+    });
+    const medals=['🥇','🥈','🥉'];
+    $('result-list').innerHTML=ranked.map((p,i)=>{
+      const st=getStats(playerData[p.player_id]);
+      return `<div class="result-row">
+        <span class="result-rank">${medals[i]||`${i+1}位`}</span>
+        <span class="result-dot" style="background:${p.color}"></span>
+        <span class="result-name">${p.player_name}${p.player_id===myId?' <span class="psc-self">自分</span>':''}</span>
+        <span class="result-pos">${st.finished?'ゴール':st.pos+'マス'}</span>
+      </div>`;
+    }).join('');
+    $('result-screen').classList.remove('hidden');
+    $('result-screen').classList.add('visible');
+  }
+
+  $('btn-result-title').addEventListener('click',()=>{
+    roomId='';players=[];isHost=false;playerData={};
+    nameInput.value='';wordInput.value='';
+    $('result-screen').classList.add('hidden');
+    showScreen('title-screen');
+  });
 
 }());
 
