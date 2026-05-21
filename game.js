@@ -74,7 +74,8 @@
   let pendingRoll = null, pendingCommit = null, prevPlayerData = {};
   const processedImgCache = {};
   let itemAcquisitionQueue = [], itemAcquisitionActive = false, gameStartShown = false;
-  let lastActionInfo = null, observerAnimCancel = false;
+  let lastActionInfo = null, observerAnimCancel = false, observerAnimating = false;
+  let broadcastHandledPid = null, pendingObserverEvent = null;
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -375,6 +376,8 @@
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},p=>onRoomChange(p.new))
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},()=>{if(!isHost)showDissolutionOverlay();})
       .on('postgres_changes',{event:'*',schema:'public',table:'room_players',filter:`room_id=eq.${roomId}`},()=>refreshPlayers())
+      .on('broadcast',{event:'turn_anim'},({payload})=>onObserverAnim(payload))
+      .on('broadcast',{event:'turn_event'},({payload})=>onObserverEvent(payload))
       .subscribe();
   }
 
@@ -409,32 +412,48 @@
   canvas.width=CW; canvas.height=CH;
 
   function applyRoomState(room){
-    const prevData={...playerData};
-    prevPlayerData=prevData;
     const newRoomData=room.alive_cells||{};
     const action=newRoomData.__last_action;
-    playerData=newRoomData;
     currentPlayerIndex=room.current_player_index||0;
     turnNumber=room.turn_number||0;
+
+    // observer アニメーション中に DB 更新が届いた場合: playerData だけ更新して抜ける
+    // prevPlayerData は onObserverAnim で設定済みなので触らない
+    if(observerAnimating){
+      playerData=newRoomData;
+      updateTurnUI();
+      broadcastHandledPid=null;
+      return;
+    }
+
+    prevPlayerData={...playerData};
+    playerData=newRoomData;
     updateTurnUI();
 
+    // broadcast で既にアニメ済みなら再アニメしない
+    if(action&&action.pid!==myId&&action.pid===broadcastHandledPid){
+      broadcastHandledPid=null;
+      drawBoard();
+      requestAnimationFrame(showStatDeltas);
+      return;
+    }
+    broadcastHandledPid=null;
+
+    // broadcast が届かなかった場合のフォールバック: DB ベースのアニメ
     if(action&&action.pid!==myId){
       observerAnimCancel=true;
-      const fromSt=getStats(prevData[action.pid]);
+      const fromSt=getStats(prevPlayerData[action.pid]);
       const toSt=getStats(newRoomData[action.pid]);
       if(fromSt.pos!==toSt.pos){
         setTimeout(()=>{
           observerAnimCancel=false;
-          playOtherPlayerAction(action,fromSt,newRoomData);
+          runObserverAnimation(action.pid,action.roll||1,fromSt,toSt.pos,action.route||null);
         },100);
-      } else {
-        drawBoard();
-        requestAnimationFrame(showStatDeltas);
+        return;
       }
-    } else {
-      drawBoard();
-      requestAnimationFrame(showStatDeltas);
     }
+    drawBoard();
+    requestAnimationFrame(showStatDeltas);
   }
 
   function showStatDelta(el,value,unit){
@@ -632,6 +651,11 @@
 
   async function saveRoll(st,newPos,route,roll=1){
     lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null};
+    // observer 向けに broadcast （自分自身のアニメは btn-roll で animateDice 済み）
+    channel.send({type:'broadcast',event:'turn_anim',payload:{
+      pid:myId, roll, fromPos:st.pos, toPos:newPos, route:route||null
+    }});
+
     const isGoal=newPos===100;
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
 
@@ -648,6 +672,12 @@
       const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
       const ev=pickEvent(newPos,usedIds);
       if(ev){
+        // イベント内容を observer に broadcast
+        channel.send({type:'broadcast',event:'turn_event',payload:{
+          pid:myId,
+          name:substitutePlayerName(ev.name,myName),
+          effect:effectsText(ev)
+        }});
         pendingCommit={newSt,newUsedIds:[...usedIds,ev.id],ev};
         await sleep(350);
         showEventOverlay(ev);
@@ -1220,48 +1250,73 @@
     if(e.touches.length===0)dragging=false;
   });
 
-  async function playOtherPlayerAction(action,fromSt,finalData){
-    const toSt=getStats(finalData[action.pid]);
-    const toPos=toSt.pos, toRoute=action.route;
+  // broadcast 受信: サイコロ＋移動アニメーション
+  function onObserverAnim(payload){
+    if(payload.pid===myId) return;
+    broadcastHandledPid=payload.pid;
+    prevPlayerData={...playerData}; // アニメ開始前の状態を保存（stat delta 用）
+    observerAnimCancel=true;
+    const fromSt={...getStats(playerData[payload.pid]),pos:payload.fromPos,route:payload.fromRoute||null};
+    setTimeout(()=>{
+      observerAnimCancel=false;
+      runObserverAnimation(payload.pid,payload.roll||1,fromSt,payload.toPos,payload.route||null);
+    },50);
+  }
+
+  // broadcast 受信: イベント情報
+  function onObserverEvent(payload){
+    if(payload.pid===myId) return;
+    pendingObserverEvent={pid:payload.pid,eventName:payload.name,eventEffect:payload.effect};
+  }
+
+  // observer 用アニメーション本体（broadcast/DB フォールバック共用）
+  async function runObserverAnimation(pid,roll,fromSt,toPos,toRoute){
+    observerAnimating=true;
     const btn=$('btn-roll');
     const wasDisabled=btn.disabled;
     btn.disabled=true;
 
     // サイコロ
-    if(action.roll){
-      const p=players.find(pl=>pl.player_id===action.pid);
-      await animateDice(action.roll, p?.player_name||'');
-      if(observerAnimCancel){btn.disabled=wasDisabled;playerData=finalData;drawBoard();return;}
+    if(roll){
+      const p=players.find(pl=>pl.player_id===pid);
+      await animateDice(roll,p?.player_name||'');
+      if(observerAnimCancel){observerAnimating=false;btn.disabled=wasDisabled;drawBoard();return;}
     }
 
     // コマ移動
-    playerData={...finalData,[action.pid]:fromSt};
+    playerData={...playerData,[pid]:fromSt};
     drawBoard();
     for(let pos=fromSt.pos+1;pos<=toPos;pos++){
-      if(observerAnimCancel){btn.disabled=wasDisabled;playerData=finalData;drawBoard();return;}
+      if(observerAnimCancel){observerAnimating=false;btn.disabled=wasDisabled;drawBoard();return;}
       const midRoute=(pos>BRANCH_START&&pos<BRANCH_END)?(toRoute||fromSt.route||null):null;
-      playerData={...playerData,[action.pid]:{...fromSt,pos,route:midRoute}};
+      playerData={...playerData,[pid]:{...fromSt,pos,route:midRoute}};
       drawBoard();
       await sleep(120);
     }
+    // 最終位置にセット（DB 更新が来ていれば playerData は DB 状態、来ていなければ fromSt 状態）
+    playerData={...playerData,[pid]:{...getStats(playerData[pid]),pos:toPos,route:toRoute||null}};
+    await arrivalAnimation(toPos,toRoute,pid);
 
-    playerData=finalData;
-    await arrivalAnimation(toPos,toRoute,action.pid);
+    observerAnimating=false;
     drawBoard();
-    requestAnimationFrame(showStatDeltas);
     btn.disabled=wasDisabled;
 
-    if(action.eventName){
+    // イベントがある場合はイベントを先に表示し、stat delta は DB 更新（イベント OK 後）で表示
+    if(pendingObserverEvent&&pendingObserverEvent.pid===pid){
       await sleep(350);
-      showObserverEventOverlay(action);
+      showObserverEventOverlay(pendingObserverEvent);
+      pendingObserverEvent=null;
+    } else {
+      // イベントなしの場合は stat delta を表示
+      requestAnimationFrame(showStatDeltas);
     }
   }
 
-  function showObserverEventOverlay(action){
-    const p=players.find(pl=>pl.player_id===action.pid);
+  function showObserverEventOverlay(ev){
+    const p=players.find(pl=>pl.player_id===ev.pid);
     $('event-observer-label').textContent=p?`${p.player_name} のイベント`:'';
-    $('event-name-text').textContent=action.eventName||'';
-    $('event-effect-text').textContent=action.eventEffect||'';
+    $('event-name-text').textContent=ev.eventName||'';
+    $('event-effect-text').textContent=ev.eventEffect||'';
     $('event-overlay').classList.add('observer');
     $('event-overlay').classList.remove('hidden');
   }
