@@ -259,7 +259,7 @@ body {
   #board-canvas { width: 100%; height: auto; border-radius: 0; box-shadow: none; transform-origin: 0 0; }
 
   .game-sidebar {
-    flex: 1; min-height: 0;
+    flex-shrink: 0;
     padding: 6px 10px;
     gap: 6px;
   }
@@ -271,10 +271,11 @@ body {
   #player-status-area {
     flex-direction: row; flex-wrap: nowrap;
     overflow-x: auto; flex-shrink: 0;
+    align-items: flex-start;
     padding-bottom: 4px;
     gap: 8px;
   }
-  .psc { min-width: 155px; flex-shrink: 0; }
+  .psc { min-width: 148px; max-width: 180px; flex-shrink: 0; }
 
   /* スマホでは items グリッドを小さく */
   .item-slot { min-height: 20px; }
