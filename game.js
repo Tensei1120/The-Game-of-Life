@@ -11,7 +11,7 @@
   const MAX_PLAYERS = 9;
   const MAX_HAPPINESS = 20;
   const MAX_HEALTH    = 20;
-  const FORCED_STOPS  = [20, 40, 60, 80];
+  const FORCED_STOPS  = [20, 30, 40, 60, 80];
   const BRANCH_START  = 20, BRANCH_END = 30;
   const PLAYER_COLORS = [
     '#1565c0','#c62828','#2e7d32','#e65100',
@@ -458,13 +458,13 @@
     drawSky(); drawMountains();
     drawUniBranchRoad();
     drawRoad();
-    drawBranchLabels();
     squares.forEach(sq=>{
       if(sq.num>BRANCH_START&&sq.num<BRANCH_END)return;
       drawSquare(sq);
     });
     branchSquares.job.forEach(sq=>drawBranchSquare(sq));
     branchSquares.uni.forEach(sq=>drawBranchSquare(sq));
+    drawBranchLabels();
     drawTokens();
   }
 
