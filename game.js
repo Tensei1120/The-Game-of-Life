@@ -131,24 +131,29 @@
 
     const job = squares.slice(BRANCH_START, BRANCH_END - 1).map(sq => ({ ...sq, route: 'job' }));
 
-    // Cubic bezier: arc the uni route toward the canvas center for a graceful wide loop
-    const ddx = cx30 - cx20, ddy = cy30 - cy20;
-    const chordLen = Math.sqrt(ddx*ddx + ddy*ddy);
-    const rdx = ddx/chordLen, rdy = ddy/chordLen;
-    // CW perpendicular: (rdy, -rdx)
-    const cw_px = rdy, cw_py = -rdx;
-    // Pick the perpendicular direction that points toward the canvas center
-    const midx = (cx20+cx30)/2, midy = (cy20+cy30)/2;
-    const dot = cw_px*(CW/2 - midx) + cw_py*(CH/2 - midy);
-    const bx = dot >= 0 ? cw_px : -cw_px;
-    const by = dot >= 0 ? cw_py : -cw_py;
-    // Bow amount: enough to visually separate the arc from the main road
-    const bow = chordLen * 0.52;
-    // Control points: exit/enter tangentially along the road, arc outward
-    const cp1x = cx20 + rdx*chordLen*0.22 + bx*bow;
-    const cp1y = cy20 + rdy*chordLen*0.22 + by*bow;
-    const cp2x = cx30 - rdx*chordLen*0.22 + bx*bow;
-    const cp2y = cy30 - rdy*chordLen*0.22 + by*bow;
+    // Road angle at sq20 (from sq19 toward sq20)
+    const sq19 = squares[BRANCH_START - 2];
+    const sq31 = squares[BRANCH_END];     // sq31
+    const a20 = Math.atan2(cy20 - sq19.cy, cx20 - sq19.cx);
+    const a30 = Math.atan2(sq31.cy - cy30, sq31.cx - cx30);
+
+    // Perpendicular at sq20: pick the direction toward canvas center
+    function perpToCenter(angle, px, py) {
+      const cwx = Math.sin(angle), cwy = -Math.cos(angle);
+      const dot = cwx*(CW/2 - px) + cwy*(CH/2 - py);
+      return dot >= 0 ? { px: cwx, py: cwy } : { px: -cwx, py: -cwy };
+    }
+    const p20 = perpToCenter(a20, cx20, cy20);
+    const p30 = perpToCenter(a30, cx30, cy30);
+
+    // Cubic bezier: exit sq20 perpendicular to road, enter sq30 perpendicular to road
+    // This keeps the arc away from sq17-19 (behind sq20) and sq31-33 (ahead of sq30)
+    const chordLen = Math.sqrt((cx30-cx20)**2 + (cy30-cy20)**2);
+    const exitLen = chordLen * 0.58;
+    const cp1x = cx20 + p20.px * exitLen;
+    const cp1y = cy20 + p20.py * exitLen;
+    const cp2x = cx30 + p30.px * exitLen;
+    const cp2y = cy30 + p30.py * exitLen;
 
     function bezierPt(t) {
       const u = 1-t;
@@ -176,7 +181,6 @@
 
     const steps = BRANCH_END - BRANCH_START;
     const uniSpacing = arcTotal / steps;
-
     const allPts = [{ cx: cx20, cy: cy20 }];
     for (let i = 1; i < steps; i++) {
       const pt = bezierPt(tAtLen(i * uniSpacing));
@@ -210,9 +214,13 @@
       });
     }
 
-    // Peak of the cubic bezier arc (t=0.5), used for label placement
+    // Bezier peak (t=0.5) for label placement
     const peakX = 0.125*cx20 + 0.375*cp1x + 0.375*cp2x + 0.125*cx30;
     const peakY = 0.125*cy20 + 0.375*cp1y + 0.375*cp2y + 0.125*cy30;
+    // Average bow direction for label offset
+    const avgBx = (p20.px + p30.px) / 2, avgBy = (p20.py + p30.py) / 2;
+    const avgBLen = Math.sqrt(avgBx*avgBx + avgBy*avgBy) || 1;
+    const bx = avgBx/avgBLen, by = avgBy/avgBLen;
 
     return { job, uni, cp1x, cp1y, cp2x, cp2y, cx20, cy20, cx30, cy30, bx, by, peakX, peakY };
   })();
@@ -231,7 +239,6 @@
   function showScreen(id){SCREENS.forEach(sid=>{const el=$(sid);if(sid===id)fadeIn(el);else if(!el.classList.contains('hidden'))fadeOut(el);});}
 
   $('btn-go').addEventListener('click',()=>showScreen('word-screen'));
-
   const nameInput=$('name-input'),wordInput=$('word-input'),wordError=$('word-error');
   $('btn-create').addEventListener('click',enterRoom);
   nameInput.addEventListener('keydown',e=>e.key==='Enter'&&wordInput.focus());
@@ -407,13 +414,11 @@
     await animateDice(roll);
     const st = getStats(playerData[myId]);
     const newPos = calcLanding(st.pos, roll);
-
     if (newPos === BRANCH_START && !st.route) {
       pendingRoll = { st, newPos };
       $('route-overlay').classList.remove('hidden');
       return;
     }
-
     if (FORCED_STOPS.includes(newPos) && newPos !== st.pos + roll) showStopMessage(newPos);
     const newRoute = (st.route && newPos >= BRANCH_END) ? null : (st.route || null);
     await saveRoll(st, newPos, newRoute);
@@ -435,7 +440,6 @@
     const { st, newPos } = pendingRoll; pendingRoll = null;
     await saveRoll(st, newPos, 'job');
   });
-
   $('btn-route-uni').addEventListener('click', async () => {
     $('route-overlay').classList.add('hidden');
     if (!pendingRoll) return;
@@ -460,28 +464,46 @@
     drawSky(); drawMountains();
     drawUniBranchRoad();
     drawRoad();
-    drawBranchLabels();
+    // Junction blend circles drawn between roads and squares
+    drawJunctionBubbles();
     squares.forEach(sq => {
       if (sq.num > BRANCH_START && sq.num < BRANCH_END) return;
       drawSquare(sq);
     });
     branchSquares.job.forEach(sq => drawBranchSquare(sq));
     branchSquares.uni.forEach(sq => drawBranchSquare(sq));
+    drawBranchLabels();
     drawTokens();
+  }
+
+  // Soft radial gradient blobs at the two junction points to visually merge the roads
+  function drawJunctionBubbles(){
+    const {cx20, cy20, cx30, cy30} = branchSquares;
+    [[cx20,cy20],[cx30,cy30]].forEach(([x,y])=>{
+      const r = ROAD_W / 2 + 10;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0,   '#ede0b8');
+      g.addColorStop(0.55,'#d8c890');
+      g.addColorStop(1,   'rgba(200,180,100,0)');
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+      ctx.fillStyle = g; ctx.fill();
+    });
   }
 
   function drawUniBranchRoad(){
     const {cp1x, cp1y, cp2x, cp2y, cx20, cy20, cx30, cy30} = branchSquares;
+    // Slightly narrower than main road; distinct blue/indigo color scheme
+    const rw = Math.round(ROAD_W * 0.80);
     ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
     function bezier(){
       ctx.beginPath(); ctx.moveTo(cx20, cy20);
       ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, cx30, cy30);
     }
-    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; bezier(); ctx.stroke();
-    ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#c8a060';              bezier(); ctx.stroke();
-    ctx.lineWidth=ROAD_W;    ctx.strokeStyle='#ddb870';              bezier(); ctx.stroke();
-    ctx.lineWidth=ROAD_W-14; ctx.strokeStyle='rgba(255,235,180,0.35)'; bezier(); ctx.stroke();
-    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.setLineDash([18,22]);
+    ctx.lineWidth=rw+14; ctx.strokeStyle='rgba(40,30,100,0.32)';  bezier(); ctx.stroke();
+    ctx.lineWidth=rw+4;  ctx.strokeStyle='#6070c0';               bezier(); ctx.stroke();
+    ctx.lineWidth=rw;    ctx.strokeStyle='#8898e0';               bezier(); ctx.stroke();
+    ctx.lineWidth=rw-16; ctx.strokeStyle='rgba(200,210,255,0.38)';bezier(); ctx.stroke();
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.60)'; ctx.setLineDash([18,22]);
     bezier(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
@@ -493,17 +515,16 @@
     ctx.save();
     ctx.font='bold 12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
 
-    // 就職ルートラベル: 中間マスの上
+    // Job route label: above middle job square
     const jx = j0.cx, jy = j0.cy - SQ_ACROSS * 0.65;
     ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(jx-46,jy-10,92,20,6); ctx.fill();
     ctx.fillStyle='#b05010'; ctx.fillText('💼 就職ルート', jx, jy);
 
-    // 大学ルートラベル: ベジェ弧の頂点からアーク外側に少しオフセット
-    const labelOff = SQ_ACROSS * 0.7;
-    const ux = peakX + bx * labelOff;
-    const uy = peakY + by * labelOff;
-    ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
-    ctx.fillStyle='#1030b0'; ctx.fillText('🎓 大学ルート', ux, uy);
+    // Uni route label: at bezier arc peak, offset in bow direction
+    const ux = peakX + bx * SQ_ACROSS * 0.72;
+    const uy = peakY + by * SQ_ACROSS * 0.72;
+    ctx.fillStyle='rgba(230,235,255,0.92)'; ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
+    ctx.fillStyle='#1830b0'; ctx.fillText('🎓 大学ルート', ux, uy);
     ctx.restore();
   }
 
@@ -531,17 +552,14 @@
 
   function drawSquare({num, cx, cy, corners}){
     const isGoal=num===100, isStart=num===1, isStop=FORCED_STOPS.includes(num);
-
     ctx.save();
     ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
     ctx.fillStyle = quadGrad(num, corners, false, false);
     quadPath(corners); ctx.fill();
     ctx.restore();
-
     ctx.strokeStyle = squareBorder(num);
     ctx.lineWidth = isGoal||isStart||isStop ? 2.5 : 1.5;
     quadPath(corners); ctx.stroke();
-
     ctx.save();
     ctx.globalAlpha = 0.32; ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.beginPath();
@@ -551,7 +569,6 @@
     ctx.lineTo(lerp(corners[0], corners[3], 0.35).x, lerp(corners[0], corners[3], 0.35).y);
     ctx.closePath(); ctx.fill();
     ctx.restore();
-
     ctx.textAlign='center'; ctx.textBaseline='middle';
     if(isGoal){
       ctx.fillStyle='#8a6000'; ctx.font='bold 14px Segoe UI'; ctx.fillText('GOAL', cx, cy-11);
@@ -570,17 +587,14 @@
 
   function drawBranchSquare({num, cx, cy, corners, route}){
     const isJob = route==='job';
-
     ctx.save();
     ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
     ctx.fillStyle = quadGrad(num, corners, isJob, !isJob);
     quadPath(corners); ctx.fill();
     ctx.restore();
-
     ctx.strokeStyle = isJob ? '#c06810' : '#2840b8';
     ctx.lineWidth = 1.5;
     quadPath(corners); ctx.stroke();
-
     ctx.fillStyle = isJob ? '#904010' : '#1830a0';
     ctx.font='12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(num, cx, cy);
