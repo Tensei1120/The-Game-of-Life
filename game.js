@@ -681,3 +681,72 @@
   }
 
 }());
+
+// スマホ用ピンチズーム＋ドラッグ
+(function(){
+  if(window.matchMedia('(min-width:700px)').matches)return;
+  const canv=document.getElementById('board-canvas');
+  const wrap=canv.parentElement;
+
+  let s=1, ox=0, oy=0;
+
+  function clamp(){
+    const ww=wrap.offsetWidth, wh=wrap.offsetHeight;
+    const sw=canv.offsetWidth*s, sh=canv.offsetHeight*s;
+    ox = sw<=ww ? (ww-sw)/2 : Math.min(0,Math.max(ww-sw,ox));
+    oy = sh<=wh ? (wh-sh)/2 : Math.min(0,Math.max(wh-sh,oy));
+  }
+  function apply(){
+    clamp();
+    canv.style.transform=`translate(${ox}px,${oy}px) scale(${s})`;
+  }
+  function ptDist(a,b){
+    const dx=a.clientX-b.clientX,dy=a.clientY-b.clientY;
+    return Math.sqrt(dx*dx+dy*dy);
+  }
+
+  let pinching=false,prevDist=0;
+  let dragging=false,dragX=0,dragY=0,dragOX=0,dragOY=0;
+  let lastTap=0;
+
+  wrap.addEventListener('touchstart',e=>{
+    if(e.touches.length===2){
+      pinching=true; dragging=false;
+      prevDist=ptDist(e.touches[0],e.touches[1]);
+      e.preventDefault();
+    } else if(e.touches.length===1){
+      const now=Date.now();
+      if(now-lastTap<300){ s=1;ox=0;oy=0;apply(); }
+      lastTap=now;
+      if(s>1.02){
+        dragging=true;
+        dragX=e.touches[0].clientX; dragY=e.touches[0].clientY;
+        dragOX=ox; dragOY=oy;
+        e.preventDefault();
+      }
+    }
+  },{passive:false});
+
+  wrap.addEventListener('touchmove',e=>{
+    if(pinching&&e.touches.length===2){
+      const d=ptDist(e.touches[0],e.touches[1]);
+      const ns=Math.max(1,Math.min(4,s*d/prevDist));
+      const rect=wrap.getBoundingClientRect();
+      const mx=(e.touches[0].clientX+e.touches[1].clientX)/2-rect.left;
+      const my=(e.touches[0].clientY+e.touches[1].clientY)/2-rect.top;
+      ox=mx-(mx-ox)*ns/s;
+      oy=my-(my-oy)*ns/s;
+      s=ns; prevDist=d;
+      apply(); e.preventDefault();
+    } else if(dragging&&e.touches.length===1){
+      ox=dragOX+e.touches[0].clientX-dragX;
+      oy=dragOY+e.touches[0].clientY-dragY;
+      apply(); e.preventDefault();
+    }
+  },{passive:false});
+
+  wrap.addEventListener('touchend',e=>{
+    if(e.touches.length<2)pinching=false;
+    if(e.touches.length===0)dragging=false;
+  });
+})();
