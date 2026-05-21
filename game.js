@@ -702,6 +702,24 @@
     '昭和親父':    'linear-gradient(150deg,#e8a860 0%,#b86e28 100%)',
     'グローブ':    'linear-gradient(150deg,#7ed87e 0%,#3aaa3a 100%)',
   };
+  function removeWhiteBg(srcImg){
+    const cv=document.createElement('canvas');
+    cv.width=srcImg.naturalWidth; cv.height=srcImg.naturalHeight;
+    const c=cv.getContext('2d');
+    c.drawImage(srcImg,0,0);
+    const data=c.getImageData(0,0,cv.width,cv.height), d=data.data;
+    for(let i=0;i<d.length;i+=4){
+      const r=d[i],g=d[i+1],b=d[i+2];
+      const sat=Math.max(r,g,b)-Math.min(r,g,b);
+      const bright=Math.min(r,g,b);
+      if(bright>210&&sat<50){
+        d[i+3]=Math.round(Math.max(0,(255-bright)*255/45));
+      }
+    }
+    c.putImageData(data,0,0);
+    return cv.toDataURL('image/png');
+  }
+
   let ttTimer=null;
   function showItemCard(item){
     const def=ITEMS[item]; if(!def) return;
@@ -711,9 +729,13 @@
     if(wrap) wrap.style.background=ITEM_BG[item]||'linear-gradient(150deg,#c6d9f6 0%,#deeeff 100%)';
     const img=$('item-card-img');
     img.classList.add('hidden');
-    img.onload=()=>img.classList.remove('hidden');
-    img.onerror=()=>img.classList.add('hidden');
-    img.src=`items/${encodeURIComponent(item)}.png`;
+    const loader=new Image();
+    loader.onload=()=>{
+      try{ img.src=removeWhiteBg(loader); }catch(e){ img.src=loader.src; }
+      img.classList.remove('hidden');
+    };
+    loader.onerror=()=>{};
+    loader.src=`items/${encodeURIComponent(item)}.png`;
     $('item-card-overlay').classList.remove('hidden');
   }
   function hideItemCard(){ $('item-card-overlay').classList.add('hidden'); clearTimeout(ttTimer); }
