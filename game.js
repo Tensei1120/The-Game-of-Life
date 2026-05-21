@@ -492,7 +492,7 @@
           document.querySelectorAll(`.item-slot-img[data-item-img="${item}"]`).forEach(el=>{ el.src=processed; });
         }catch(e){}
       };
-      loader.onerror=()=>{};
+      loader.onerror=()=>{ if(!loader.src.endsWith('.jpg')) loader.src=`items/${item}.jpg`; };
       loader.src=`items/${item}.png`;
     });
   }
@@ -820,7 +820,7 @@
       try{ img.src=removeWhiteBg(loader); }catch(e){ img.src=loader.src; }
       img.classList.remove('hidden');
     };
-    loader.onerror=()=>{};
+    loader.onerror=()=>{ if(!loader.src.endsWith('.jpg')) loader.src=`items/${item}.jpg`; };
     loader.src=`items/${item}.png`;
     const overlay=$('item-card-overlay');
     acquired ? overlay.classList.add('acquire') : overlay.classList.remove('acquire');
@@ -1238,7 +1238,7 @@
         try{ img.src=removeWhiteBg(loader); }catch(e){ img.src=loader.src; }
         img.classList.remove('hidden');
       };
-      loader.onerror=()=>img.classList.add('hidden');
+      loader.onerror=()=>{ if(!loader.src.endsWith('.jpg')){ loader.src=`items/${item}.jpg`; }else{ img.classList.add('hidden'); } };
       img.classList.add('hidden');
       loader.src=`items/${item}.png`;
     });
