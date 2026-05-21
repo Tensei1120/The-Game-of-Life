@@ -440,6 +440,13 @@ body {
   cursor: pointer; transition: all .2s; box-shadow: 0 4px 16px rgba(30,140,60,.3);
 }
 #btn-event-ok:hover { transform: translateY(-2px); }
+.event-observer-label {
+  font-size: .8rem; font-weight: 700; color: #5080b0;
+  background: #eef5ff; border-radius: 20px; padding: 3px 14px;
+  display: none;
+}
+#event-overlay.observer .event-observer-label { display: block; }
+#event-overlay:not(.observer) .event-observer-label { display: none; }
 
 /* アイテム捨てオーバーレイ */
 #discard-overlay {

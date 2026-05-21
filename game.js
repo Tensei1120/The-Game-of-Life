@@ -74,6 +74,7 @@
   let pendingRoll = null, pendingCommit = null, prevPlayerData = {};
   const processedImgCache = {};
   let itemAcquisitionQueue = [], itemAcquisitionActive = false, gameStartShown = false;
+  let lastActionInfo = null, observerAnimCancel = false;
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -408,12 +409,32 @@
   canvas.width=CW; canvas.height=CH;
 
   function applyRoomState(room){
-    prevPlayerData={...playerData};
-    playerData=room.alive_cells||{};
+    const prevData={...playerData};
+    prevPlayerData=prevData;
+    const newRoomData=room.alive_cells||{};
+    const action=newRoomData.__last_action;
+    playerData=newRoomData;
     currentPlayerIndex=room.current_player_index||0;
     turnNumber=room.turn_number||0;
-    updateTurnUI(); drawBoard();
-    requestAnimationFrame(showStatDeltas);
+    updateTurnUI();
+
+    if(action&&action.pid!==myId){
+      observerAnimCancel=true;
+      const fromSt=getStats(prevData[action.pid]);
+      const toSt=getStats(newRoomData[action.pid]);
+      if(fromSt.pos!==toSt.pos){
+        setTimeout(()=>{
+          observerAnimCancel=false;
+          playOtherPlayerAction(action,fromSt,newRoomData);
+        },100);
+      } else {
+        drawBoard();
+        requestAnimationFrame(showStatDeltas);
+      }
+    } else {
+      drawBoard();
+      requestAnimationFrame(showStatDeltas);
+    }
   }
 
   function showStatDelta(el,value,unit){
@@ -610,6 +631,7 @@
   }
 
   async function saveRoll(st,newPos,route){
+    lastActionInfo={pid:myId,route:route||null,eventName:null,eventEffect:null};
     const isGoal=newPos===100;
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
 
@@ -655,6 +677,7 @@
     newSt=clampStats(newSt);
     const newData={...playerData,[myId]:newSt};
     newData.__used_events=newUsedIds;
+    if(lastActionInfo){newData.__last_action={...lastActionInfo};lastActionInfo=null;}
     const finishedCount=players.filter(p=>getStats(newData[p.player_id]).finished).length;
     if(players.length>1&&finishedCount>=players.length-1){
       await sb.from('rooms').update({
@@ -691,7 +714,15 @@
 
   $('btn-event-ok').addEventListener('click',async()=>{
     $('event-overlay').classList.add('hidden');
+    if($('event-overlay').classList.contains('observer')){
+      $('event-overlay').classList.remove('observer');
+      return;
+    }
     const {newSt,newUsedIds,ev}=pendingCommit;
+    if(lastActionInfo&&ev){
+      lastActionInfo.eventName=substitutePlayerName(ev.name,myName);
+      lastActionInfo.eventEffect=effectsText(ev);
+    }
     let st=applyEventToStats(newSt,ev);
     if(st._pendingItem){
       const pendingItem=st._pendingItem; delete st._pendingItem;
@@ -834,10 +865,10 @@
     disp.classList.add('hidden'); disp.classList.remove('landed');
   }
 
-  async function arrivalAnimation(pos, route){
+  async function arrivalAnimation(pos, route, pid=myId){
     const sq=getBranchSq(pos,route)||squares[pos];
     if(!sq)return;
-    const p=players.find(pl=>pl.player_id===myId);
+    const p=players.find(pl=>pl.player_id===pid);
     if(!p)return;
     for(const scale of [1.65,1.0,1.35,1.0,1.15,1.0]){
       drawBoard();
@@ -1187,6 +1218,37 @@
     if(e.touches.length<2)pinching=false;
     if(e.touches.length===0)dragging=false;
   });
+
+  async function playOtherPlayerAction(action,fromSt,finalData){
+    const toSt=getStats(finalData[action.pid]);
+    const toPos=toSt.pos, toRoute=action.route;
+    playerData={...finalData,[action.pid]:fromSt};
+    drawBoard();
+    for(let pos=fromSt.pos+1;pos<=toPos;pos++){
+      if(observerAnimCancel){playerData=finalData;drawBoard();return;}
+      const midRoute=(pos>BRANCH_START&&pos<BRANCH_END)?(toRoute||fromSt.route||null):null;
+      playerData={...playerData,[action.pid]:{...fromSt,pos,route:midRoute}};
+      drawBoard();
+      await sleep(120);
+    }
+    playerData=finalData;
+    await arrivalAnimation(toPos,toRoute,action.pid);
+    drawBoard();
+    requestAnimationFrame(showStatDeltas);
+    if(action.eventName){
+      await sleep(350);
+      showObserverEventOverlay(action);
+    }
+  }
+
+  function showObserverEventOverlay(action){
+    const p=players.find(pl=>pl.player_id===action.pid);
+    $('event-observer-label').textContent=p?`${p.player_name} のイベント`:'';
+    $('event-name-text').textContent=action.eventName||'';
+    $('event-effect-text').textContent=action.eventEffect||'';
+    $('event-overlay').classList.add('observer');
+    $('event-overlay').classList.remove('hidden');
+  }
 
   function showGameStart(){
     const el=$('game-start-overlay');
