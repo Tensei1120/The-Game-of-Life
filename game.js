@@ -690,39 +690,36 @@
     $('dice-result').textContent+=`　★ ${pos}マスで強制ストップ！`;
   }
 
-  // ── アイテムツールチップ（長押し） ──
-  const tooltip=document.createElement('div');
-  tooltip.id='item-tooltip'; tooltip.className='hidden'; document.body.appendChild(tooltip);
+  // ── アイテムカード（長押し） ──
   let ttTimer=null;
-  function showTooltip(item,targetEl){
+  function showItemCard(item){
     const def=ITEMS[item]; if(!def) return;
-    tooltip.innerHTML=`<strong>${item}</strong><br>${def.desc.replace(/\n/g,'<br>')}`;
-    tooltip.style.left='-9999px'; tooltip.style.top='-9999px';
-    tooltip.classList.remove('hidden');
-    const r=targetEl.getBoundingClientRect();
-    const w=tooltip.offsetWidth,h=tooltip.offsetHeight;
-    let left=r.left+r.width/2-w/2, top=r.top-h-8;
-    if(left<8)left=8;
-    if(left+w>window.innerWidth-8)left=window.innerWidth-w-8;
-    if(top<8)top=r.bottom+8;
-    tooltip.style.left=left+'px'; tooltip.style.top=top+'px';
+    $('item-card-name').textContent=item;
+    $('item-card-desc').textContent=def.desc;
+    const img=$('item-card-img');
+    img.classList.add('hidden');
+    img.onload=()=>img.classList.remove('hidden');
+    img.onerror=()=>img.classList.add('hidden');
+    img.src=`items/${encodeURIComponent(item)}.png`;
+    $('item-card-overlay').classList.remove('hidden');
   }
-  function hideTooltip(){ tooltip.classList.add('hidden'); clearTimeout(ttTimer); }
-  function bindTooltip(area){
+  function hideItemCard(){ $('item-card-overlay').classList.add('hidden'); clearTimeout(ttTimer); }
+  function bindItemCard(area){
     area.addEventListener('mousedown',e=>{
       const s=e.target.closest('.item-slot.filled[data-item]'); if(!s)return;
-      ttTimer=setTimeout(()=>showTooltip(s.dataset.item,s),400);
+      ttTimer=setTimeout(()=>showItemCard(s.dataset.item),400);
     });
-    area.addEventListener('mouseup',hideTooltip);
-    area.addEventListener('mouseleave',hideTooltip);
+    area.addEventListener('mouseup',()=>clearTimeout(ttTimer));
+    area.addEventListener('mouseleave',()=>clearTimeout(ttTimer));
     area.addEventListener('touchstart',e=>{
       const s=e.target.closest('.item-slot.filled[data-item]'); if(!s)return;
-      ttTimer=setTimeout(()=>showTooltip(s.dataset.item,s),400);
+      ttTimer=setTimeout(()=>showItemCard(s.dataset.item),400);
     },{passive:true});
-    area.addEventListener('touchend',hideTooltip);
-    area.addEventListener('touchcancel',hideTooltip);
+    area.addEventListener('touchend',()=>clearTimeout(ttTimer));
+    area.addEventListener('touchcancel',()=>clearTimeout(ttTimer));
   }
-  bindTooltip($('player-status-area'));
+  $('item-card-overlay').addEventListener('click',hideItemCard);
+  bindItemCard($('player-status-area'));
 
   const DICE_FACE=['⚀','⚁','⚂','⚃','⚄','⚅'];
   async function animateDice(result){
