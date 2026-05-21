@@ -472,19 +472,34 @@
     return next;
   }
 
+  async function animateMove(fromSt, toPos, toRoute) {
+    for (let pos = fromSt.pos + 1; pos <= toPos; pos++) {
+      const midRoute = (pos > BRANCH_START && pos < BRANCH_END)
+        ? (toRoute || fromSt.route || null) : null;
+      playerData = {...playerData, [myId]: {...fromSt, pos, route: midRoute}};
+      drawBoard();
+      await sleep(120);
+    }
+  }
+
   async function saveRoll(st,newPos,route){
     const isGoal=newPos===100;
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
+
+    await animateMove(st, newPos, route);
+
     const newSt=clampStats({...st, pos:newPos,
       route:isGoal?null:(route||null),
       finished:isGoal||!!st.finished});
+    playerData={...playerData,[myId]:newSt};
+    drawBoard();
+
     if(!isGoal&&isEventSquare(newPos)){
       const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
       const ev=pickEvent(newPos,usedIds);
       if(ev){
         pendingCommit={newSt,newUsedIds:[...usedIds,ev.id],ev};
-        playerData={...playerData,[myId]:newSt};
-        drawBoard();
+        await sleep(400);
         showEventOverlay(ev);
         return;
       }
