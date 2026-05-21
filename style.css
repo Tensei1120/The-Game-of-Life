@@ -441,4 +441,15 @@ body {
   border: 2px solid #d0e0f0; border-radius: 10px;
   background: #f4f8ff; color: #1a3a5c; cursor: pointer; transition: all .2s;
 }
-.discard-btn:hover { background: #ffe0e0; border-color: #e08080; color: #a02020; transform: scale(1.04); }
+.discard-btn:not(.locked):hover { background: #ffe0e0; border-color: #e08080; color: #a02020; transform: scale(1.04); }
+.discard-btn.locked { background: #f0f0f0; color: #aaa; border-color: #ddd; cursor: not-allowed; opacity: .6; }
+
+/* アイテムツールチップ */
+#item-tooltip {
+  position: fixed; z-index: 350; pointer-events: none;
+  background: rgba(18,28,58,.93); color: #fff;
+  border-radius: 10px; padding: 10px 14px;
+  font-size: .82rem; line-height: 1.65; max-width: 220px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.45);
+  white-space: pre-wrap;
+}

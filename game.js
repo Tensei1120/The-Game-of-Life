@@ -34,6 +34,27 @@
     { id:13, minPos:1, maxPos:10, name:'スケボーで転んで骨折れた…。でもなんか包帯かっこいいかも！？', happiness:1, health:-4 },
   ];
 
+  const ITEMS = {
+    '親のスネ':   { desc:'毎ターン3万円獲得\n幸福度+1・健康度+1',                                          perTurn:{money:3,happiness:1,health:1},  transformAt:{pos:50,into:'親のセワ'} },
+    '親のセワ':   { desc:'毎ターン5万円失う・健康度-2\n捨てられない',                                      perTurn:{money:-5,health:-2},            undiscardable:true,  disappearAt:90 },
+    '教育ママ':   { desc:'20マス目まで捨てられない\n塾のテキスト・ピアノ・水泳教室を守る\n20マス目で大学ルート強制', undiscardableUntil:20, protects:['塾のテキスト','ピアノ','水泳教室'], forceRoute:{pos:20,route:'uni'} },
+    '塾のテキスト':{ desc:'毎ターン幸福度-3\n20マス目で消滅',                                              perTurn:{happiness:-3},                  disappearAt:20 },
+    'ピアノ':     { desc:'毎ターン幸福度+1\n捨てると50万円獲得',                                          perTurn:{happiness:1},                   onDiscard:{money:50} },
+    '水泳教室':   { desc:'毎ターン健康度+1',                                                              perTurn:{health:1} },
+    '貧困家庭':   { desc:'毎ターン1万円失う・健康度-1\n所持金20万円超で消滅\n20マス目で就職ルート強制',   perTurn:{money:-1,health:-1},            disappearIfMoneyAbove:20, forceRoute:{pos:20,route:'job'} },
+    '昭和親父':   { desc:'20マス目まで捨てられない\nグローブを守る',                                      undiscardableUntil:20, protects:['グローブ'] },
+    'グローブ':   { desc:'毎ターン健康度+1',                                                              perTurn:{health:1} },
+  };
+
+  function rollStartItems(){
+    const r=Math.random();
+    if(r<0.50) return ['親のスネ'];
+    if(r<0.70) return [];
+    if(r<0.80) return ['教育ママ','塾のテキスト','ピアノ','水泳教室'];
+    if(r<0.90) return ['貧困家庭'];
+    return ['昭和親父','グローブ'];
+  }
+
   const WAYPOINTS = [
     [ 80,865],[215,878],[365,862],[515,878],[665,862],[820,875],[970,862],
     [1055,790],[1060,695],[1055,600],
@@ -336,7 +357,12 @@
   }
   $('btn-lobby-start').addEventListener('click',async()=>{
     const initData={};
-    players.forEach(p=>{initData[p.player_id]=defaultStats(0);});
+    players.forEach(p=>{
+      const st=defaultStats(0);
+      const startItems=rollStartItems();
+      startItems.forEach((item,i)=>{ if(i<st.items.length) st.items[i]=item; });
+      initData[p.player_id]=st;
+    });
     await sb.from('rooms').update({status:'playing',alive_cells:initData}).eq('id',roomId);
   });
 
@@ -402,7 +428,7 @@
       const jobLabel=(st.job||'未定')+routeLabel;
       const isMine=p.player_id===myId;
       const itemsHtml=st.items.map(item=>
-        item?`<div class="item-slot filled" title="${item}">${item}</div>`
+        item?`<div class="item-slot filled" data-item="${item}">${item}</div>`
             :`<div class="item-slot">∅</div>`
       ).join('');
       return `
@@ -413,7 +439,7 @@
             ${st.finished?'<span class="psc-goal">🏆ゴール</span>':'<span class="psc-job">💼 '+jobLabel+'</span>'}
           </div>
           <div class="psc-stats">
-            <span class="psc-stat">💰 <span class="psc-stat-val">${st.money}万円</span></span>
+            <span class="psc-stat">💰 <span class="psc-stat-val">${st.money<0?'－'+Math.abs(st.money):st.money}万円</span></span>
             <span class="psc-stat">😊 <span class="psc-stat-val">${st.happiness}/${MAX_HAPPINESS}</span></span>
             <span class="psc-stat">❤️ <span class="psc-stat-val">${st.health}/${MAX_HEALTH}</span></span>
             <span class="psc-stat">📍 <span class="psc-stat-val">${st.pos}マス</span></span>
@@ -431,6 +457,12 @@
     const st=getStats(playerData[myId]);
     const newPos=calcLanding(st.pos,roll);
     if(newPos===BRANCH_START&&!st.route){
+      const forced=getForcedRoute(st);
+      if(forced){
+        if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
+        await saveRoll(st,newPos,forced);
+        return;
+      }
       pendingRoll={st,newPos};
       $('route-overlay').classList.remove('hidden');
       return;
@@ -439,6 +471,45 @@
     const newRoute=(st.route&&newPos>=BRANCH_END)?null:(st.route||null);
     await saveRoll(st,newPos,newRoute);
   });
+
+  function getForcedRoute(st){
+    if(st.items.includes('教育ママ')) return 'uni';
+    if(st.items.includes('貧困家庭')) return 'job';
+    return null;
+  }
+  function canDiscard(item,st){
+    if(!item) return true;
+    const def=ITEMS[item]; if(!def) return true;
+    if(def.undiscardable) return false;
+    if(def.undiscardableUntil!==undefined&&st.pos<def.undiscardableUntil) return false;
+    for(const held of st.items){
+      if(!held||held===item) continue;
+      if(ITEMS[held]?.protects?.includes(item)) return false;
+    }
+    return true;
+  }
+  function applyItemTransformations(st){
+    const items=[...st.items]; let changed=false;
+    for(let i=0;i<items.length;i++){
+      const item=items[i]; if(!item) continue;
+      const def=ITEMS[item]; if(!def) continue;
+      if(def.transformAt&&st.pos>=def.transformAt.pos){ items[i]=def.transformAt.into; changed=true; }
+      else if(def.disappearAt!==undefined&&st.pos>=def.disappearAt){ items[i]=null; changed=true; }
+      else if(def.disappearIfMoneyAbove!==undefined&&st.money>def.disappearIfMoneyAbove){ items[i]=null; changed=true; }
+    }
+    return changed?{...st,items}:st;
+  }
+  function applyPerTurnEffects(st){
+    let money=st.money,happiness=st.happiness,health=st.health;
+    for(const item of st.items){
+      if(!item) continue;
+      const pt=ITEMS[item]?.perTurn; if(!pt) continue;
+      if(pt.money)     money     +=pt.money;
+      if(pt.happiness) happiness +=pt.happiness;
+      if(pt.health)    health    +=pt.health;
+    }
+    return{...st,money,happiness,health};
+  }
 
   function isEventSquare(pos){
     return pos>0&&pos<100&&!FORCED_STOPS.includes(pos);
@@ -514,13 +585,17 @@
     $('event-overlay').classList.remove('hidden');
   }
   function showDiscardOverlay(currentItems,newItem){
-    $('discard-items').innerHTML=[...currentItems,newItem].map((item,i)=>
-      `<button class="discard-btn" data-idx="${i}">${item}</button>`
-    ).join('');
+    const st=getStats(playerData[myId]);
+    $('discard-items').innerHTML=[...currentItems,newItem].map((item,i)=>{
+      const locked=i<6&&!canDiscard(item,st);
+      return `<button class="discard-btn${locked?' locked':''}" data-idx="${i}" ${locked?'disabled':''}>${item}${locked?' 🔒':''}</button>`;
+    }).join('');
     $('discard-overlay').classList.remove('hidden');
   }
 
   async function doCommitSave(newSt,newUsedIds){
+    newSt=applyItemTransformations(newSt);
+    newSt=applyPerTurnEffects(newSt);
     newSt=clampStats(newSt);
     const newData={...playerData,[myId]:newSt};
     newData.__used_events=newUsedIds;
@@ -572,19 +647,58 @@
   });
 
   $('discard-items').addEventListener('click',async e=>{
-    const btn=e.target.closest('.discard-btn');
+    const btn=e.target.closest('.discard-btn:not(.locked)');
     if(!btn)return;
     $('discard-overlay').classList.add('hidden');
     const idx=parseInt(btn.dataset.idx);
     const {newSt,newUsedIds,pendingItem}=pendingCommit;
-    const items=[...newSt.items];
-    if(idx<6) items[idx]=pendingItem;
-    await doCommitSave({...newSt,items},newUsedIds);
+    let st={...newSt,items:[...newSt.items]};
+    if(idx<6){
+      const discarded=st.items[idx];
+      const onDiscard=ITEMS[discarded]?.onDiscard;
+      if(onDiscard?.money) st.money=(st.money||0)+onDiscard.money;
+      st.items[idx]=pendingItem;
+    }
+    await doCommitSave(st,newUsedIds);
   });
 
   function showStopMessage(pos){
     $('dice-result').textContent+=`　★ ${pos}マスで強制ストップ！`;
   }
+
+  // ── アイテムツールチップ（長押し） ──
+  const tooltip=document.createElement('div');
+  tooltip.id='item-tooltip'; tooltip.className='hidden'; document.body.appendChild(tooltip);
+  let ttTimer=null;
+  function showTooltip(item,targetEl){
+    const def=ITEMS[item]; if(!def) return;
+    tooltip.innerHTML=`<strong>${item}</strong><br>${def.desc.replace(/\n/g,'<br>')}`;
+    tooltip.style.left='-9999px'; tooltip.style.top='-9999px';
+    tooltip.classList.remove('hidden');
+    const r=targetEl.getBoundingClientRect();
+    const w=tooltip.offsetWidth,h=tooltip.offsetHeight;
+    let left=r.left+r.width/2-w/2, top=r.top-h-8;
+    if(left<8)left=8;
+    if(left+w>window.innerWidth-8)left=window.innerWidth-w-8;
+    if(top<8)top=r.bottom+8;
+    tooltip.style.left=left+'px'; tooltip.style.top=top+'px';
+  }
+  function hideTooltip(){ tooltip.classList.add('hidden'); clearTimeout(ttTimer); }
+  function bindTooltip(area){
+    area.addEventListener('mousedown',e=>{
+      const s=e.target.closest('.item-slot.filled[data-item]'); if(!s)return;
+      ttTimer=setTimeout(()=>showTooltip(s.dataset.item,s),400);
+    });
+    area.addEventListener('mouseup',hideTooltip);
+    area.addEventListener('mouseleave',hideTooltip);
+    area.addEventListener('touchstart',e=>{
+      const s=e.target.closest('.item-slot.filled[data-item]'); if(!s)return;
+      ttTimer=setTimeout(()=>showTooltip(s.dataset.item,s),400);
+    },{passive:true});
+    area.addEventListener('touchend',hideTooltip);
+    area.addEventListener('touchcancel',hideTooltip);
+  }
+  bindTooltip($('player-status-area'));
 
   const DICE_FACE=['⚀','⚁','⚂','⚃','⚄','⚅'];
   async function animateDice(result){
