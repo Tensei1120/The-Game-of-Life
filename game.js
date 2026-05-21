@@ -70,7 +70,7 @@
 
   let myName='', roomId='', players=[], isHost=false, playerData={};
   let currentPlayerIndex=0, turnNumber=0, isMyTurn=false, rolling=false, channel=null;
-  let pendingRoll = null, pendingCommit = null;
+  let pendingRoll = null, pendingCommit = null, prevPlayerData = {};
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -401,10 +401,34 @@
   canvas.width=CW; canvas.height=CH;
 
   function applyRoomState(room){
+    prevPlayerData={...playerData};
     playerData=room.alive_cells||{};
     currentPlayerIndex=room.current_player_index||0;
     turnNumber=room.turn_number||0;
     updateTurnUI(); drawBoard();
+    requestAnimationFrame(showStatDeltas);
+  }
+
+  function showStatDelta(el,value,unit){
+    const s=document.createElement('span');
+    s.className='stat-delta '+(value>0?'pos':'neg');
+    s.textContent=(value>0?'＋':'－')+Math.abs(value)+(unit||'');
+    const r=el.getBoundingClientRect();
+    s.style.left=(r.right+4)+'px'; s.style.top=(r.top-2)+'px';
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),1600);
+  }
+  function showStatDeltas(){
+    players.forEach(p=>{
+      const prev=getStats(prevPlayerData[p.player_id]);
+      const curr=getStats(playerData[p.player_id]);
+      const dm=curr.money-prev.money, dh=curr.happiness-prev.happiness, dhp=curr.health-prev.health;
+      if(!dm&&!dh&&!dhp) return;
+      const sel=s=>`[data-pid="${p.player_id}"][data-stat="${s}"]`;
+      if(dm) { const el=document.querySelector(sel('money'));      if(el) showStatDelta(el,dm,'万円'); }
+      if(dh) { const el=document.querySelector(sel('happiness'));  if(el) showStatDelta(el,dh,''); }
+      if(dhp){ const el=document.querySelector(sel('health'));     if(el) showStatDelta(el,dhp,''); }
+    });
   }
 
   function updateTurnUI(){
@@ -439,9 +463,9 @@
             ${st.finished?'<span class="psc-goal">🏆ゴール</span>':'<span class="psc-job">💼 '+jobLabel+'</span>'}
           </div>
           <div class="psc-stats">
-            <span class="psc-stat">💰 <span class="psc-stat-val">${st.money<0?'－'+Math.abs(st.money):st.money}万円</span></span>
-            <span class="psc-stat">😊 <span class="psc-stat-val">${st.happiness}/${MAX_HAPPINESS}</span></span>
-            <span class="psc-stat">❤️ <span class="psc-stat-val">${st.health}/${MAX_HEALTH}</span></span>
+            <span class="psc-stat">💰 <span class="psc-stat-val" data-pid="${p.player_id}" data-stat="money">${st.money<0?'－'+Math.abs(st.money):st.money}万円</span></span>
+            <span class="psc-stat">😊 <span class="psc-stat-val" data-pid="${p.player_id}" data-stat="happiness">${st.happiness}/${MAX_HAPPINESS}</span></span>
+            <span class="psc-stat">❤️ <span class="psc-stat-val" data-pid="${p.player_id}" data-stat="health">${st.health}/${MAX_HEALTH}</span></span>
             <span class="psc-stat">📍 <span class="psc-stat-val">${st.pos}マス</span></span>
           </div>
           <div class="psc-items">${itemsHtml}</div>

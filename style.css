@@ -397,6 +397,21 @@ body {
   font-size: 1.4rem; font-weight: 800; color: #e06000; letter-spacing: .05em; min-height: 1.7rem;
 }
 
+/* ステータス差分インジケーター */
+@keyframes floatDelta {
+  0%   { opacity: 1; transform: translateY(0); }
+  70%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-26px); }
+}
+.stat-delta {
+  position: fixed; z-index: 400; pointer-events: none;
+  font-size: .78rem; font-weight: 800; letter-spacing: .02em;
+  animation: floatDelta 1.5s ease-out forwards;
+  white-space: nowrap;
+}
+.stat-delta.pos { color: #18a840; }
+.stat-delta.neg { color: #e02828; }
+
 /* イベントオーバーレイ */
 #event-overlay {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
