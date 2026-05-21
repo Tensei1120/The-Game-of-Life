@@ -86,14 +86,14 @@
       const dx = WAYPOINTS[i][0]-WAYPOINTS[i-1][0], dy = WAYPOINTS[i][1]-WAYPOINTS[i-1][1];
       segLens.push(Math.sqrt(dx*dx+dy*dy)); total += segLens[segLens.length-1];
     }
-    // Square tiles: both dimensions equal the along-path spacing
-    SQ_ALONG  = total / 99;
+    // 101 squares (0=START … 100=GOAL), 100 intervals
+    SQ_ALONG  = total / 100;
     SQ_ACROSS = SQ_ALONG;
-    ROAD_W    = SQ_ACROSS + 8;   // slim road — just a thin border around tiles
+    ROAD_W    = SQ_ACROSS + 8;
     const spacing = SQ_ALONG;
 
     const pts = [];
-    for (let n = 0; n < 100; n++) {
+    for (let n = 0; n <= 100; n++) {
       const target = n * spacing;
       let traveled = 0, seg = 0;
       while (seg < segLens.length-1 && traveled+segLens[seg] < target) traveled += segLens[seg++];
@@ -108,17 +108,17 @@
 
     const bounds = [];
     { const p=perp(pts[0].angle); bounds.push({x:pts[0].cx,y:pts[0].cy,nx:p.nx,ny:p.ny}); }
-    for (let i=1; i<=99; i++) {
+    for (let i=1; i<=100; i++) {
       const mx=(pts[i-1].cx+pts[i].cx)/2, my=(pts[i-1].cy+pts[i].cy)/2;
       const angle=Math.atan2(pts[i].cy-pts[i-1].cy, pts[i].cx-pts[i-1].cx);
       const p=perp(angle);
       bounds.push({x:mx,y:my,nx:p.nx,ny:p.ny});
     }
-    { const p=perp(pts[99].angle); bounds.push({x:pts[99].cx,y:pts[99].cy,nx:p.nx,ny:p.ny}); }
+    { const p=perp(pts[100].angle); bounds.push({x:pts[100].cx,y:pts[100].cy,nx:p.nx,ny:p.ny}); }
 
     const sqs = [];
-    for (let n=0; n<100; n++) {
-      const num=n+1;
+    for (let n=0; n<=100; n++) {
+      const num=n;
       const isStop=FORCED_STOPS.includes(num), isGoal=num===100;
       const half_h = isGoal?SQ_ACROSS*0.75 : isStop?SQ_ACROSS*0.68 : SQ_ACROSS/2;
       const L=bounds[n], R=bounds[n+1];
@@ -136,13 +136,13 @@
   }
 
   const branchSquares = (function() {
-    const sq20=squares[BRANCH_START-1], sq30=squares[BRANCH_END-1];
+    const sq20=squares[BRANCH_START], sq30=squares[BRANCH_END];
     const cx20=sq20.cx, cy20=sq20.cy, cx30=sq30.cx, cy30=sq30.cy;
 
-    const job = squares.slice(BRANCH_START, BRANCH_END-1).map(sq=>({...sq,route:'job'}));
+    const job = squares.slice(BRANCH_START+1, BRANCH_END).map(sq=>({...sq,route:'job'}));
 
     // Road angles at the junction squares
-    const sq19=squares[BRANCH_START-2], sq31=squares[BRANCH_END];
+    const sq19=squares[BRANCH_START-1], sq31=squares[BRANCH_END+1];
     const a20=Math.atan2(cy20-sq19.cy, cx20-sq19.cx);
     const a30=Math.atan2(sq31.cy-cy30, sq31.cx-cx30);
 
@@ -511,7 +511,7 @@
     const g=ctx.createLinearGradient(tx,ty,bx,by);
     if(isJob)                         {g.addColorStop(0,'#fff3d8');g.addColorStop(1,'#f0c870');}
     else if(isUni)                    {g.addColorStop(0,'#e4eaff');g.addColorStop(1,'#a0b8f8');}
-    else if(num===1)                  {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
+    else if(num===0)                  {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
     else if(num===100)                {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
     else if(FORCED_STOPS.includes(num)){g.addColorStop(0,'#ffe0e0');g.addColorStop(1,'#f08888');}
     else if(num%10===0)               {g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
@@ -519,13 +519,13 @@
     return g;
   }
   function tileBorder(num){
-    if(num===1)return'#2a8a40'; if(num===100)return'#c89000';
+    if(num===0)return'#2a8a40'; if(num===100)return'#c89000';
     if(FORCED_STOPS.includes(num))return'#c02020';
     if(num%10===0)return'#d06020'; return'#b89860';
   }
 
   function drawSquare({num,cx,cy,corners}){
-    const isGoal=num===100,isStart=num===1,isStop=FORCED_STOPS.includes(num);
+    const isGoal=num===100,isStart=num===0,isStop=FORCED_STOPS.includes(num);
     const h=SQ_ACROSS;
     const fs =Math.max(8, Math.round(h*0.28));
     const fsB=Math.max(9, Math.round(h*0.30));
@@ -647,7 +647,7 @@
     players.forEach(p=>{
       const st=getStats(playerData[p.player_id]);
       const bsq=getBranchSq(st.pos,st.route);
-      const sq=bsq||squares[st.pos>0?st.pos-1:0];
+      const sq=bsq||squares[st.pos];
       if(!sq)return;
       const key=`${st.pos}-${st.route||'main'}`;
       (byKey[key]=byKey[key]||[]).push({p,sq});
