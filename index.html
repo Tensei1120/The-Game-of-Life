@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GO!GO!LIFE</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="title-screen">
+    <h1 id="title-text">GO!GO!LIFE</h1>
+    <button id="btn-go">START</button>
+  </div>
+
+  <div id="word-screen" class="hidden">
+    <div class="word-card">
+      <p class="word-label">名前とあいことばを入力</p>
+      <input id="name-input" type="text" maxlength="10" placeholder="あなたの名前" autocomplete="off">
+      <input id="word-input" type="text" maxlength="20" placeholder="あいことば" autocomplete="off" spellcheck="false">
+      <p id="word-error" class="word-error"></p>
+      <button id="btn-create">ルームに入る</button>
+    </div>
+  </div>
+
+  <div id="lobby-screen" class="hidden">
+    <div class="lobby-card">
+      <h2 id="lobby-room-name"></h2>
+      <p class="lobby-subtitle">参加者</p>
+      <ul id="player-list"></ul>
+      <p id="lobby-capacity" class="lobby-capacity"></p>
+      <button id="btn-lobby-start">ゲーム開始</button>
+      <p id="lobby-hint" class="hint">ホストがゲームを開始するまでお待ちください</p>
+    </div>
+  </div>
+
+  <div id="game-screen" class="hidden">
+    <div class="game-header">
+      <h2>GO!GO!LIFE</h2>
+      <span id="room-badge"></span>
+      <div id="turn-indicator">-</div>
+    </div>
+    <div class="game-body">
+      <div class="canvas-wrapper">
+        <canvas id="board-canvas"></canvas>
+      </div>
+      <div class="game-sidebar">
+        <div id="dice-area">
+          <div id="dice-result"></div>
+          <button id="btn-roll">🎲 サイコロを振る</button>
+        </div>
+        <div id="player-status-area"></div>
+        <div class="stats">
+          <span>ターン: <strong id="turn-number">0</strong></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ルート選択オーバーレイ -->
+  <div id="route-overlay" class="hidden">
+    <div class="route-box">
+      <p class="route-icon">🚗</p>
+      <p class="route-title">20マス・分岐点！</p>
+      <p class="route-sub">あなたの人生の進路を選んでください。<br>30マスで再び共通ルートに戻ります。</p>
+      <div class="route-buttons">
+        <button id="btn-route-job">💼 就職ルート</button>
+        <button id="btn-route-uni">🎓 大学ルート</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dissolution-overlay" class="hidden">
+    <div class="dissolution-box">
+      <p class="dissolution-icon">🚪</p>
+      <p class="dissolution-title">ホストが退出しました</p>
+      <p class="dissolution-sub">ルームが解散されました。<br>タイトルに戻ります...</p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
