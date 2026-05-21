@@ -11,7 +11,7 @@
   const MAX_PLAYERS = 9;
   const MAX_HAPPINESS = 20;
   const MAX_HEALTH    = 20;
-  const FORCED_STOPS  = [20, 30, 40, 60, 80];
+  const FORCED_STOPS  = [20, 30, 50, 70, 90];
   const BRANCH_START  = 20, BRANCH_END = 30;
   const PLAYER_COLORS = [
     '#1565c0','#c62828','#2e7d32','#e65100',
@@ -515,14 +515,13 @@
     else if(num===100)                {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
     else if(FORCED_STOPS.includes(num)){g.addColorStop(0,'#ffe0e0');g.addColorStop(1,'#f08888');}
     else if(num%10===0)               {g.addColorStop(0,'#ffe0c0');g.addColorStop(1,'#f0a060');}
-    else if(num%5===0)                {g.addColorStop(0,'#d0eaff');g.addColorStop(1,'#90c8f0');}
     else                              {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
     return g;
   }
   function tileBorder(num){
     if(num===1)return'#2a8a40'; if(num===100)return'#c89000';
     if(FORCED_STOPS.includes(num))return'#c02020';
-    if(num%10===0)return'#d06020'; if(num%5===0)return'#3a80c0'; return'#b89860';
+    if(num%10===0)return'#d06020'; return'#b89860';
   }
 
   function drawSquare({num,cx,cy,corners}){
@@ -567,7 +566,7 @@
       ctx.fillText('★STOP',cx,cy-dy*0.7);
       ctx.fillText(num,cx,cy+dy*0.7);
     } else {
-      ctx.fillStyle=num%10===0?'#c05010':num%5===0?'#1a60a0':'#7a6040';
+      ctx.fillStyle=num%10===0?'#c05010':'#7a6040';
       ctx.font=num%10===0?`bold ${fsB}px Segoe UI`:`${fs}px Segoe UI`;
       ctx.fillText(num,cx,cy);
     }
