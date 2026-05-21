@@ -5,9 +5,9 @@
   const isConfigured = !SUPABASE_URL.includes('YOUR_PROJECT_ID');
 
   const CW=1120, CH=930;
-  const SQ_ACROSS = 110;
+  let SQ_ACROSS = 44;  // set dynamically in buildSquares to match SQ_ALONG (square tiles)
   let SQ_ALONG = 44;
-  let ROAD_W = 132;
+  let ROAD_W = 66;
   const MAX_PLAYERS = 9;
   const MAX_HAPPINESS = 20;
   const MAX_HEALTH = 20;
@@ -73,9 +73,11 @@
       const dx = WAYPOINTS[i][0]-WAYPOINTS[i-1][0], dy = WAYPOINTS[i][1]-WAYPOINTS[i-1][1];
       segLens.push(Math.sqrt(dx*dx+dy*dy)); total += segLens[segLens.length-1];
     }
-    ROAD_W = SQ_ACROSS + 22;
+    // Square tiles: perpendicular width = along-path height
     SQ_ALONG = total / 99;
-    const spacing = total / 99;
+    SQ_ACROSS = SQ_ALONG;
+    ROAD_W = SQ_ACROSS + 22;
+    const spacing = SQ_ALONG;
 
     const pts = [];
     for (let n = 0; n < 100; n++) {
@@ -107,12 +109,7 @@
       const num = n + 1;
       const isStop = FORCED_STOPS.includes(num);
       const isGoal = num === 100;
-      const isBranchPt = num === BRANCH_START || num === BRANCH_END;
-      // Branch-point squares are largest to visually anchor the fork/merge
-      const half_h = isGoal      ? SQ_ACROSS * 0.75
-                   : isBranchPt  ? SQ_ACROSS * 0.88
-                   : isStop      ? SQ_ACROSS * 0.68
-                   : SQ_ACROSS / 2;
+      const half_h = isGoal ? SQ_ACROSS * 0.75 : isStop ? SQ_ACROSS * 0.68 : SQ_ACROSS / 2;
       const L = bounds[n], R = bounds[n+1];
       sqs.push({
         num,
@@ -136,33 +133,13 @@
 
     const job = squares.slice(BRANCH_START, BRANCH_END - 1).map(sq => ({ ...sq, route: 'job' }));
 
-    // Road angle at sq20 (sq19 → sq20) and at sq30 (sq30 → sq31)
-    const sq19 = squares[BRANCH_START - 2];
-    const sq31 = squares[BRANCH_END];
-    const a20 = Math.atan2(cy20 - sq19.cy, cx20 - sq19.cx);
-    const a30 = Math.atan2(sq31.cy - cy30, sq31.cx - cx30);
-
-    // Perpendicular toward canvas center at each junction
-    function perpToCenter(angle, px, py) {
-      const cwx = Math.sin(angle), cwy = -Math.cos(angle);
-      const dot = cwx*(CW/2 - px) + cwy*(CH/2 - py);
-      return dot >= 0 ? { px: cwx, py: cwy } : { px: -cwx, py: -cwy };
-    }
-    const p20 = perpToCenter(a20, cx20, cy20);
-    const p30 = perpToCenter(a30, cx30, cy30);
-
-    const chordLen = Math.sqrt((cx30-cx20)**2 + (cy30-cy20)**2);
-    const exitLen = chordLen * 0.58;
-    const cp1x = cx20 + p20.px * exitLen;
-    const cp1y = cy20 + p20.py * exitLen;
-    const cp2x = cx30 + p30.px * exitLen;
-    const cp2y = cy30 + p30.py * exitLen;
+    const cpx = (cx20 + cx30) / 2 - Math.abs(cy20 - cy30) * 1.4;
+    const cpy = (cy20 + cy30) / 2 + (cy20 - cy30) * 0.1;
 
     function bezierPt(t) {
-      const u = 1-t;
       return {
-        x: u*u*u*cx20 + 3*u*u*t*cp1x + 3*u*t*t*cp2x + t*t*t*cx30,
-        y: u*u*u*cy20 + 3*u*u*t*cp1y + 3*u*t*t*cp2y + t*t*t*cy30
+        x: (1-t)*(1-t)*cx20 + 2*(1-t)*t*cpx + t*t*cx30,
+        y: (1-t)*(1-t)*cy20 + 2*(1-t)*t*cpy + t*t*cy30
       };
     }
 
@@ -184,6 +161,7 @@
 
     const steps = BRANCH_END - BRANCH_START;
     const uniSpacing = arcTotal / steps;
+
     const allPts = [{ cx: cx20, cy: cy20 }];
     for (let i = 1; i < steps; i++) {
       const pt = bezierPt(tAtLen(i * uniSpacing));
@@ -200,8 +178,7 @@
       bounds.push({ x: mx, y: my, nx: p.nx, ny: p.ny });
     }
 
-    // Uni squares are sized to fit inside the road width (half_h < ROAD_W/2)
-    const half_h = Math.floor(ROAD_W / 2) - 8;  // 58px, well inside 66px road radius
+    const half_h = SQ_ACROSS / 2;
     const uni = [];
     for (let i = 0; i < 9; i++) {
       const L = bounds[i], R = bounds[i+1];
@@ -218,13 +195,7 @@
       });
     }
 
-    const peakX = 0.125*cx20 + 0.375*cp1x + 0.375*cp2x + 0.125*cx30;
-    const peakY = 0.125*cy20 + 0.375*cp1y + 0.375*cp2y + 0.125*cy30;
-    const avgBx = (p20.px + p30.px) / 2, avgBy = (p20.py + p30.py) / 2;
-    const avgBLen = Math.sqrt(avgBx*avgBx + avgBy*avgBy) || 1;
-    const bx = avgBx/avgBLen, by = avgBy/avgBLen;
-
-    return { job, uni, cp1x, cp1y, cp2x, cp2y, cx20, cy20, cx30, cy30, bx, by, peakX, peakY };
+    return { job, uni, cpx, cpy, cx20, cy20, cx30, cy30 };
   })();
 
   function getBranchSq(pos, route) {
@@ -241,6 +212,7 @@
   function showScreen(id){SCREENS.forEach(sid=>{const el=$(sid);if(sid===id)fadeIn(el);else if(!el.classList.contains('hidden'))fadeOut(el);});}
 
   $('btn-go').addEventListener('click',()=>showScreen('word-screen'));
+
   const nameInput=$('name-input'),wordInput=$('word-input'),wordError=$('word-error');
   $('btn-create').addEventListener('click',enterRoom);
   nameInput.addEventListener('keydown',e=>e.key==='Enter'&&wordInput.focus());
@@ -416,11 +388,13 @@
     await animateDice(roll);
     const st = getStats(playerData[myId]);
     const newPos = calcLanding(st.pos, roll);
+
     if (newPos === BRANCH_START && !st.route) {
       pendingRoll = { st, newPos };
       $('route-overlay').classList.remove('hidden');
       return;
     }
+
     if (FORCED_STOPS.includes(newPos) && newPos !== st.pos + roll) showStopMessage(newPos);
     const newRoute = (st.route && newPos >= BRANCH_END) ? null : (st.route || null);
     await saveRoll(st, newPos, newRoute);
@@ -442,6 +416,7 @@
     const { st, newPos } = pendingRoll; pendingRoll = null;
     await saveRoll(st, newPos, 'job');
   });
+
   $('btn-route-uni').addEventListener('click', async () => {
     $('route-overlay').classList.add('hidden');
     if (!pendingRoll) return;
@@ -466,61 +441,45 @@
     drawSky(); drawMountains();
     drawUniBranchRoad();
     drawRoad();
-    drawJunctionBubbles();
+    drawBranchLabels();
     squares.forEach(sq => {
       if (sq.num > BRANCH_START && sq.num < BRANCH_END) return;
       drawSquare(sq);
     });
     branchSquares.job.forEach(sq => drawBranchSquare(sq));
     branchSquares.uni.forEach(sq => drawBranchSquare(sq));
-    drawBranchLabels();
     drawTokens();
   }
 
-  // Radial gradient blend at junction points so both roads merge smoothly
-  function drawJunctionBubbles(){
-    const {cx20, cy20, cx30, cy30} = branchSquares;
-    [[cx20,cy20],[cx30,cy30]].forEach(([x,y])=>{
-      const r = ROAD_W / 2 + 14;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0,   '#ede0b8');
-      g.addColorStop(0.5, '#d8c890');
-      g.addColorStop(1,   'rgba(200,180,100,0)');
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
-      ctx.fillStyle = g; ctx.fill();
-    });
-  }
-
   function drawUniBranchRoad(){
-    const {cp1x, cp1y, cp2x, cp2y, cx20, cy20, cx30, cy30} = branchSquares;
+    const {cpx, cpy, cx20, cy20, cx30, cy30} = branchSquares;
     ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
     function bezier(){
       ctx.beginPath(); ctx.moveTo(cx20, cy20);
-      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, cx30, cy30);
+      ctx.quadraticCurveTo(cpx, cpy, cx30, cy30);
     }
-    // Full ROAD_W so uni squares (half_h < ROAD_W/2) never protrude beyond road edge
-    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(40,30,100,0.32)';  bezier(); ctx.stroke();
-    ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#6070c0';               bezier(); ctx.stroke();
-    ctx.lineWidth=ROAD_W;    ctx.strokeStyle='#8898e0';               bezier(); ctx.stroke();
-    ctx.lineWidth=ROAD_W-16; ctx.strokeStyle='rgba(200,210,255,0.38)';bezier(); ctx.stroke();
-    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.60)'; ctx.setLineDash([18,22]);
+    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.35)'; bezier(); ctx.stroke();
+    ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#c8a060';              bezier(); ctx.stroke();
+    ctx.lineWidth=ROAD_W;    ctx.strokeStyle='#ddb870';              bezier(); ctx.stroke();
+    ctx.lineWidth=ROAD_W-14; ctx.strokeStyle='rgba(255,235,180,0.35)'; bezier(); ctx.stroke();
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.setLineDash([18,22]);
     bezier(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
 
   function drawBranchLabels(){
     const j0 = branchSquares.job[4];
-    if (!j0) return;
-    const { peakX, peakY, bx, by } = branchSquares;
+    const u0 = branchSquares.uni[4];
+    if (!j0 || !u0) return;
     ctx.save();
-    ctx.font='bold 12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    const jx = j0.cx, jy = j0.cy - SQ_ACROSS * 0.65;
+    ctx.font='bold 11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const labelOff = SQ_ACROSS * 0.9;
+    const jx = j0.cx, jy = j0.cy - labelOff;
     ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(jx-46,jy-10,92,20,6); ctx.fill();
     ctx.fillStyle='#b05010'; ctx.fillText('💼 就職ルート', jx, jy);
-    const ux = peakX + bx * SQ_ACROSS * 0.72;
-    const uy = peakY + by * SQ_ACROSS * 0.72;
-    ctx.fillStyle='rgba(230,235,255,0.92)'; ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
-    ctx.fillStyle='#1830b0'; ctx.fillText('🎓 大学ルート', ux, uy);
+    const ux = u0.cx, uy = u0.cy - labelOff;
+    ctx.fillStyle='rgba(255,255,255,0.88)'; ctx.beginPath(); ctx.roundRect(ux-46,uy-10,92,20,6); ctx.fill();
+    ctx.fillStyle='#1030b0'; ctx.fillText('🎓 大学ルート', ux, uy);
     ctx.restore();
   }
 
@@ -530,10 +489,8 @@
     const bx = (corners[2].x + corners[3].x) / 2;
     const by = (corners[2].y + corners[3].y) / 2;
     const g = ctx.createLinearGradient(tx, ty, bx, by);
-    const isBranchPt = num === BRANCH_START || num === BRANCH_END;
     if (isJob)                         {g.addColorStop(0,'#fff3d8');g.addColorStop(1,'#f0c870');}
     else if (isUni)                    {g.addColorStop(0,'#e4eaff');g.addColorStop(1,'#a0b8f8');}
-    else if (isBranchPt)               {g.addColorStop(0,'#f0e8ff');g.addColorStop(1,'#c0a0f0');}
     else if(num===1)                   {g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
     else if(num===100)                 {g.addColorStop(0,'#fff080');g.addColorStop(1,'#f0c020');}
     else if(FORCED_STOPS.includes(num)){g.addColorStop(0,'#ffe0e0');g.addColorStop(1,'#f08888');}
@@ -544,25 +501,22 @@
   }
   function squareBorder(num){
     if(num===1)return'#2a8a40'; if(num===100)return'#c89000';
-    if(num===BRANCH_START||num===BRANCH_END)return'#6030c8';
     if(FORCED_STOPS.includes(num))return'#c02020';
     if(num%10===0)return'#d06020'; if(num%5===0)return'#3a80c0'; return'#b89860';
   }
 
   function drawSquare({num, cx, cy, corners}){
     const isGoal=num===100, isStart=num===1, isStop=FORCED_STOPS.includes(num);
-    const isBranchPt = num===BRANCH_START || num===BRANCH_END;
+    const h = SQ_ACROSS;  // use current dynamic value for font/position scaling
 
     ctx.save();
-    ctx.shadowColor = isBranchPt ? 'rgba(80,0,180,0.35)' : 'rgba(0,0,0,0.18)';
-    ctx.shadowBlur = isBranchPt ? 12 : 6;
-    ctx.shadowOffsetY = 2;
+    ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
     ctx.fillStyle = quadGrad(num, corners, false, false);
     quadPath(corners); ctx.fill();
     ctx.restore();
 
     ctx.strokeStyle = squareBorder(num);
-    ctx.lineWidth = isBranchPt ? 3 : isGoal||isStart||isStop ? 2.5 : 1.5;
+    ctx.lineWidth = isGoal||isStart||isStop ? 2.5 : 1.5;
     quadPath(corners); ctx.stroke();
 
     ctx.save();
@@ -575,39 +529,47 @@
     ctx.closePath(); ctx.fill();
     ctx.restore();
 
+    const fs  = Math.max(8,  Math.round(h * 0.28));  // normal font size
+    const fsB = Math.max(9,  Math.round(h * 0.30));  // bold font size
+    const fsE = Math.max(12, Math.round(h * 0.38));  // emoji font size
+    const dy  = h * 0.20;                             // line offset
+
     ctx.textAlign='center'; ctx.textBaseline='middle';
     if(isGoal){
-      ctx.fillStyle='#8a6000'; ctx.font='bold 14px Segoe UI'; ctx.fillText('GOAL', cx, cy-11);
-      ctx.font='22px serif'; ctx.fillText('🏆', cx, cy+12);
+      ctx.fillStyle='#8a6000';
+      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('GOAL', cx, cy - dy);
+      ctx.font=`${fsE}px serif`;          ctx.fillText('🏆', cx, cy + dy);
     } else if(isStart){
-      ctx.fillStyle='#1a6030'; ctx.font='bold 13px Segoe UI'; ctx.fillText('START', cx, cy);
-    } else if(isBranchPt){
-      // Branch-point: show fork icon + number
-      ctx.fillStyle='#4010a0'; ctx.font='bold 13px Segoe UI';
-      ctx.fillText(num===BRANCH_START?'分岐':'合流', cx, cy-10);
-      ctx.font='16px serif'; ctx.fillText(num===BRANCH_START?'🔀':'🔁', cx, cy+8);
+      ctx.fillStyle='#1a6030';
+      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('START', cx, cy);
     } else if(isStop){
-      ctx.fillStyle='#a00000'; ctx.font='bold 12px Segoe UI'; ctx.fillText('★STOP', cx, cy-8);
-      ctx.font='bold 12px Segoe UI'; ctx.fillText(num, cx, cy+9);
+      ctx.fillStyle='#a00000';
+      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('★STOP', cx, cy - dy * 0.75);
+      ctx.fillText(num, cx, cy + dy * 0.75);
     } else {
       ctx.fillStyle = num%10===0?'#c05010': num%5===0?'#1a60a0': '#7a6040';
-      ctx.font = num%10===0?'bold 14px Segoe UI': '12px Segoe UI';
+      ctx.font = num%10===0 ? `bold ${fsB}px Segoe UI` : `${fs}px Segoe UI`;
       ctx.fillText(num, cx, cy);
     }
   }
 
   function drawBranchSquare({num, cx, cy, corners, route}){
     const isJob = route==='job';
+    const h = SQ_ACROSS;
+    const fs = Math.max(8, Math.round(h * 0.28));
+
     ctx.save();
     ctx.shadowColor='rgba(0,0,0,0.18)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
     ctx.fillStyle = quadGrad(num, corners, isJob, !isJob);
     quadPath(corners); ctx.fill();
     ctx.restore();
+
     ctx.strokeStyle = isJob ? '#c06810' : '#2840b8';
     ctx.lineWidth = 1.5;
     quadPath(corners); ctx.stroke();
+
     ctx.fillStyle = isJob ? '#904010' : '#1830a0';
-    ctx.font='12px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font=`${fs}px Segoe UI`; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(num, cx, cy);
   }
 
