@@ -35,24 +35,24 @@
   </div>
 
   <div id="game-screen" class="hidden">
-    <div class="container">
-      <div class="game-header">
-        <h2>GO!GO!LIFE</h2>
-        <span id="room-badge"></span>
-      </div>
-      <div class="turn-info">
-        <div id="turn-indicator">-</div>
-      </div>
+    <div class="game-header">
+      <h2>GO!GO!LIFE</h2>
+      <span id="room-badge"></span>
+      <div id="turn-indicator">-</div>
+    </div>
+    <div class="game-body">
       <div class="canvas-wrapper">
         <canvas id="board-canvas"></canvas>
       </div>
-      <div id="dice-area">
-        <div id="dice-result"></div>
-        <button id="btn-roll">🎲 サイコロを振る</button>
-      </div>
-      <div id="player-status-area"></div>
-      <div class="stats">
-        <span>ターン: <strong id="turn-number">0</strong></span>
+      <div class="game-sidebar">
+        <div id="dice-area">
+          <div id="dice-result"></div>
+          <button id="btn-roll">🎲 サイコロを振る</button>
+        </div>
+        <div id="player-status-area"></div>
+        <div class="stats">
+          <span>ターン: <strong id="turn-number">0</strong></span>
+        </div>
       </div>
     </div>
   </div>
