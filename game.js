@@ -388,10 +388,7 @@
       } else {applyRoomState(room);}
       if(room.status==='playing'&&!gameStartShown){
         gameStartShown=true;
-        const mySt=getStats(playerData[myId]);
-        const ns=mySt.__new_item_slots||[];
-        const si=ns.map(i=>mySt.items[i]).filter(Boolean);
-        if(si.length) setTimeout(()=>queueItemAcquisition(si),600);
+        setTimeout(showGameStart,500);
       }
       if(room.status==='finished') showResultScreen();
     }
@@ -1189,5 +1186,50 @@
   wrap.addEventListener('touchend',e=>{
     if(e.touches.length<2)pinching=false;
     if(e.touches.length===0)dragging=false;
+  });
+
+  function showGameStart(){
+    const el=$('game-start-overlay');
+    el.classList.remove('hidden');
+    const mySt=getStats(playerData[myId]);
+    const startItems=mySt.items.filter(Boolean);
+    setTimeout(()=>{
+      el.classList.add('hidden');
+      if(startItems.length) showStartItemsOverlay(startItems);
+    },1800);
+  }
+
+  function showStartItemsOverlay(items){
+    const overlay=$('start-items-overlay');
+    const container=$('start-items-container');
+    container.innerHTML='';
+    items.forEach(item=>{
+      const def=ITEMS[item];
+      const card=document.createElement('div');
+      card.className='start-item-card';
+      card.innerHTML=`
+        <div class="start-item-img-wrap" style="background:${ITEM_BG[item]||'linear-gradient(150deg,#c6d9f6,#deeeff)'}">
+          <img class="start-item-img" data-item="${item}" src="" alt="${item}">
+        </div>
+        <div class="start-item-body">
+          <p class="start-item-name">${item}</p>
+          <p class="start-item-desc">${def?.desc||''}</p>
+        </div>`;
+      container.appendChild(card);
+      const img=card.querySelector('.start-item-img');
+      const loader=new Image();
+      loader.onload=()=>{
+        try{ img.src=removeWhiteBg(loader); }catch(e){ img.src=loader.src; }
+        img.classList.remove('hidden');
+      };
+      loader.onerror=()=>img.classList.add('hidden');
+      img.classList.add('hidden');
+      loader.src=`items/${item}.png`;
+    });
+    overlay.classList.remove('hidden');
+  }
+
+  $('btn-start-items-ok').addEventListener('click',()=>{
+    $('start-items-overlay').classList.add('hidden');
   });
 })();
