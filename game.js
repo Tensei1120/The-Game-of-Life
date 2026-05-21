@@ -35,7 +35,7 @@
   let currentPlayerIndex=0, turnNumber=0, isMyTurn=false, rolling=false, channel=null;
   let pendingRoll = null;
 
-  function defaultStats(pos=1) {
+  function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
              items:Array(6).fill(null), job:null, route:null };
   }
@@ -45,8 +45,8 @@
       health:    Math.max(0, Math.min(MAX_HEALTH,    st.health)),
     };
   }
-  function getPos(d)   { return typeof d==='object'&&d!==null ? d.pos   : (d||1); }
-  function getStats(d) { return typeof d==='object'&&d!==null ? d : defaultStats(d||1); }
+  function getPos(d)   { return typeof d==='object'&&d!==null ? d.pos   : (d??0); }
+  function getStats(d) { return typeof d==='object'&&d!==null ? d : defaultStats(d??0); }
 
   function calcLanding(currentPos, roll) {
     const dest = Math.min(currentPos + roll, 100);
@@ -316,7 +316,7 @@
   }
   $('btn-lobby-start').addEventListener('click',async()=>{
     const initData={};
-    players.forEach(p=>{initData[p.player_id]=defaultStats(1);});
+    players.forEach(p=>{initData[p.player_id]=defaultStats(0);});
     await sb.from('rooms').update({status:'playing',alive_cells:initData}).eq('id',roomId);
   });
 
@@ -647,7 +647,7 @@
     players.forEach(p=>{
       const st=getStats(playerData[p.player_id]);
       const bsq=getBranchSq(st.pos,st.route);
-      const sq=bsq||squares[st.pos-1];
+      const sq=bsq||squares[st.pos>0?st.pos-1:0];
       if(!sq)return;
       const key=`${st.pos}-${st.route||'main'}`;
       (byKey[key]=byKey[key]||[]).push({p,sq});
