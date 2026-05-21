@@ -206,12 +206,14 @@ body {
   aspect-ratio: 1; border-radius: 5px; border: 1.5px dashed #b8cce0;
   background: #f0f8ff; display: flex; align-items: center; justify-content: center;
   font-size: .65rem; color: #90aac0; min-height: 24px; cursor: default;
+  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
 }
 .item-slot.filled {
   border-style: solid; border-color: #7ab0e0; padding: 0; overflow: hidden;
 }
 .item-slot-img {
   width: 100%; height: 100%; object-fit: contain; display: block;
+  pointer-events: none;
 }
 
 .stats { font-size: .82rem; color: #7a9ab8; text-align: center; flex-shrink: 0; }
