@@ -737,7 +737,7 @@
       img.classList.remove('hidden');
     };
     loader.onerror=()=>{};
-    loader.src=`items/${encodeURIComponent(item)}.png`;
+    loader.src=`items/${item}.png`;
     $('item-card-overlay').classList.remove('hidden');
   }
   function hideItemCard(){ $('item-card-overlay').classList.add('hidden'); clearTimeout(ttTimer); }
