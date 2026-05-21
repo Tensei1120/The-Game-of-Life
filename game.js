@@ -691,11 +691,24 @@
   }
 
   // ── アイテムカード（長押し） ──
+  const ITEM_BG = {
+    '親のスネ':    'linear-gradient(150deg,#f5d97a 0%,#f0c040 100%)',
+    '親のセワ':    'linear-gradient(150deg,#9a8eb0 0%,#6b5f80 100%)',
+    '教育ママ':    'linear-gradient(150deg,#6aabee 0%,#3a7ecc 100%)',
+    '塾のテキスト':'linear-gradient(150deg,#e8d8b0 0%,#c8b080 100%)',
+    'ピアノ':      'linear-gradient(150deg,#4a4a6a 0%,#1e1e38 100%)',
+    '水泳教室':    'linear-gradient(150deg,#60d4ee 0%,#1a9ec0 100%)',
+    '貧困家庭':    'linear-gradient(150deg,#a0aa98 0%,#6a7462 100%)',
+    '昭和親父':    'linear-gradient(150deg,#e8a860 0%,#b86e28 100%)',
+    'グローブ':    'linear-gradient(150deg,#7ed87e 0%,#3aaa3a 100%)',
+  };
   let ttTimer=null;
   function showItemCard(item){
     const def=ITEMS[item]; if(!def) return;
     $('item-card-name').textContent=item;
     $('item-card-desc').textContent=def.desc;
+    const wrap=document.querySelector('.item-card-img-wrap');
+    if(wrap) wrap.style.background=ITEM_BG[item]||'linear-gradient(150deg,#c6d9f6 0%,#deeeff 100%)';
     const img=$('item-card-img');
     img.classList.add('hidden');
     img.onload=()=>img.classList.remove('hidden');
