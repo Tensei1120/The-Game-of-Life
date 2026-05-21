@@ -18,6 +18,22 @@
     '#6a1b9a','#00838f','#f9a825','#ad1457','#37474f'
   ];
 
+  const EVENTS = [
+    { id:1,  minPos:1, maxPos:10, name:'この時間が、ずっと続くと思ってた。', item:'友達', happiness:2 },
+    { id:2,  minPos:1, maxPos:10, name:'「はいはい、お母さんが全部悪いのね。お母さんは南極にでも行ってペンギンさん達と仲良く暮らしますから。（プレイヤー名）はお父さんと幸せに暮らして。」', happiness:-3 },
+    { id:3,  minPos:1, maxPos:10, name:'昼休み鬼ごっこした！！', item:'友達', happiness:2, health:1 },
+    { id:4,  minPos:1, maxPos:10, name:'おかわりじゃんけん5連勝中！！', happiness:1 },
+    { id:5,  minPos:1, maxPos:10, name:'牛乳パック潰して先生に怒られた…。', happiness:-1 },
+    { id:6,  minPos:1, maxPos:10, name:'「よそはよそ、うちはうち！そんなに（プレイヤー名）の家がいいなら、（プレイヤー名）の家の子になりなさい！」', happiness:-2 },
+    { id:7,  minPos:1, maxPos:10, name:'おじいちゃんからお小遣いもらった！！！', money:1, happiness:3 },
+    { id:8,  minPos:1, maxPos:10, name:'夏休みおばあちゃん家に行った！！', happiness:3 },
+    { id:9,  minPos:1, maxPos:10, name:'ランドセルじゃんけん負けた…。', health:-1 },
+    { id:10, minPos:1, maxPos:10, name:'バスケで突き指…。', happiness:-1, health:-2 },
+    { id:11, minPos:1, maxPos:10, name:'「別にあいつのことなんて好きじゃねえし！」', item:'好きな人' },
+    { id:12, minPos:1, maxPos:10, name:'ドッチボール大会で優勝した！！', item:'友達', happiness:3 },
+    { id:13, minPos:1, maxPos:10, name:'スケボーで転んで骨折れた…。でもなんか包帯かっこいいかも！？', happiness:1, health:-4 },
+  ];
+
   const WAYPOINTS = [
     [ 80,865],[215,878],[365,862],[515,878],[665,862],[820,875],[970,862],
     [1055,790],[1060,695],[1055,600],
@@ -33,7 +49,7 @@
 
   let myName='', roomId='', players=[], isHost=false, playerData={};
   let currentPlayerIndex=0, turnNumber=0, isMyTurn=false, rolling=false, channel=null;
-  let pendingRoll = null;
+  let pendingRoll = null, pendingCommit = null;
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -424,15 +440,72 @@
     await saveRoll(st,newPos,newRoute);
   });
 
+  function isEventSquare(pos){
+    return pos>0&&pos<100&&!FORCED_STOPS.includes(pos);
+  }
+  function pickEvent(pos,usedIds){
+    const av=EVENTS.filter(e=>pos>=e.minPos&&pos<=e.maxPos&&!usedIds.includes(e.id));
+    return av.length?av[Math.floor(Math.random()*av.length)]:null;
+  }
+  function substitutePlayerName(text,name){
+    return text.replace(/（プレイヤー名）|\(プレイヤー名\)/g,name);
+  }
+  function effectsText(ev){
+    const p=[];
+    if(ev.item)      p.push(`アイテム「${ev.item}」を獲得！`);
+    if(ev.money)     p.push(ev.money>0?`${ev.money}万円 獲得！`:`${Math.abs(ev.money)}万円 失った...`);
+    if(ev.happiness) p.push(`幸福度 ${ev.happiness>0?'+':''}${ev.happiness}`);
+    if(ev.health)    p.push(`健康度 ${ev.health>0?'+':''}${ev.health}`);
+    return p.join('\n');
+  }
+  function applyEventToStats(st,ev){
+    const next={...st};
+    if(ev.money)     next.money=st.money+ev.money;
+    if(ev.happiness) next.happiness=st.happiness+ev.happiness;
+    if(ev.health)    next.health=st.health+ev.health;
+    if(ev.item){
+      const items=[...st.items];
+      const slot=items.indexOf(null);
+      if(slot>=0){items[slot]=ev.item;next.items=items;}
+      else next._pendingItem=ev.item;
+    }
+    return next;
+  }
+
   async function saveRoll(st,newPos,route){
     const isGoal=newPos===100;
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
     const newSt=clampStats({...st, pos:newPos,
       route:isGoal?null:(route||null),
       finished:isGoal||!!st.finished});
-    const newData={...playerData,[myId]:newSt};
+    if(!isGoal&&isEventSquare(newPos)){
+      const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
+      const ev=pickEvent(newPos,usedIds);
+      if(ev){
+        pendingCommit={newSt,newUsedIds:[...usedIds,ev.id],ev};
+        showEventOverlay(ev);
+        return;
+      }
+    }
+    await doCommitSave(newSt,Array.isArray(playerData.__used_events)?playerData.__used_events:[]);
+  }
 
-    // ゲーム終了判定：(人数-1)人がゴールしたら終了
+  function showEventOverlay(ev){
+    $('event-name-text').textContent=substitutePlayerName(ev.name,myName);
+    $('event-effect-text').textContent=effectsText(ev);
+    $('event-overlay').classList.remove('hidden');
+  }
+  function showDiscardOverlay(currentItems,newItem){
+    $('discard-items').innerHTML=[...currentItems,newItem].map((item,i)=>
+      `<button class="discard-btn" data-idx="${i}">${item}</button>`
+    ).join('');
+    $('discard-overlay').classList.remove('hidden');
+  }
+
+  async function doCommitSave(newSt,newUsedIds){
+    newSt=clampStats(newSt);
+    const newData={...playerData,[myId]:newSt};
+    newData.__used_events=newUsedIds;
     const finishedCount=players.filter(p=>getStats(newData[p.player_id]).finished).length;
     if(players.length>1&&finishedCount>=players.length-1){
       await sb.from('rooms').update({
@@ -441,8 +514,6 @@
       }).eq('id',roomId);
       return;
     }
-
-    // ゴール済みプレイヤーをスキップして次のプレイヤーを探す
     let nextIndex=(currentPlayerIndex+1)%players.length;
     for(let i=0;i<players.length;i++){
       if(!getStats(newData[players[nextIndex].player_id]).finished) break;
@@ -467,6 +538,30 @@
     if(!pendingRoll)return;
     const {st,newPos}=pendingRoll; pendingRoll=null;
     await saveRoll(st,newPos,'uni');
+  });
+
+  $('btn-event-ok').addEventListener('click',async()=>{
+    $('event-overlay').classList.add('hidden');
+    const {newSt,newUsedIds,ev}=pendingCommit;
+    let st=applyEventToStats(newSt,ev);
+    if(st._pendingItem){
+      const pendingItem=st._pendingItem; delete st._pendingItem;
+      pendingCommit={newSt:st,newUsedIds,pendingItem};
+      showDiscardOverlay(st.items,pendingItem);
+      return;
+    }
+    await doCommitSave(st,newUsedIds);
+  });
+
+  $('discard-items').addEventListener('click',async e=>{
+    const btn=e.target.closest('.discard-btn');
+    if(!btn)return;
+    $('discard-overlay').classList.add('hidden');
+    const idx=parseInt(btn.dataset.idx);
+    const {newSt,newUsedIds,pendingItem}=pendingCommit;
+    const items=[...newSt.items];
+    if(idx<6) items[idx]=pendingItem;
+    await doCommitSave({...newSt,items},newUsedIds);
   });
 
   function showStopMessage(pos){

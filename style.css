@@ -362,3 +362,49 @@ body {
 .dissolution-icon { font-size: 3rem; }
 .dissolution-title { font-size: 1.4rem; font-weight: 700; color: #e03030; }
 .dissolution-sub { font-size: .95rem; color: #8090a8; line-height: 1.8; }
+
+/* イベントオーバーレイ */
+#event-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,20,60,.78); z-index: 200; animation: fadeInOverlay .3s ease;
+}
+.event-box {
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  background: #fff; border-radius: 24px; padding: 40px 48px; text-align: center;
+  box-shadow: 0 16px 48px rgba(0,0,0,.3); max-width: 480px; width: 90%;
+}
+.event-name {
+  font-size: 1.05rem; font-weight: 700; color: #1a3a5c; line-height: 1.7; white-space: pre-wrap;
+}
+.event-effect {
+  font-size: .95rem; color: #2a7040; font-weight: 600; line-height: 1.9;
+  background: #f0fff4; border: 1px solid #b0e0c0; border-radius: 10px;
+  padding: 12px 20px; width: 100%; white-space: pre-wrap;
+}
+#btn-event-ok {
+  padding: 12px 52px; font-size: 1rem; font-weight: 700;
+  border: none; border-radius: 50px;
+  background: linear-gradient(135deg,#44bb66,#228844); color: #fff;
+  cursor: pointer; transition: all .2s; box-shadow: 0 4px 16px rgba(30,140,60,.3);
+}
+#btn-event-ok:hover { transform: translateY(-2px); }
+
+/* アイテム捨てオーバーレイ */
+#discard-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,20,60,.78); z-index: 210; animation: fadeInOverlay .3s ease;
+}
+.discard-box {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  background: #fff; border-radius: 24px; padding: 36px 40px; text-align: center;
+  box-shadow: 0 16px 48px rgba(0,0,0,.3); max-width: 460px; width: 90%;
+}
+.discard-title { font-size: 1.2rem; font-weight: 800; color: #c03030; }
+.discard-sub { font-size: .9rem; color: #6080a0; }
+#discard-items { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; width: 100%; }
+.discard-btn {
+  padding: 10px 16px; font-size: .9rem; font-weight: 600;
+  border: 2px solid #d0e0f0; border-radius: 10px;
+  background: #f4f8ff; color: #1a3a5c; cursor: pointer; transition: all .2s;
+}
+.discard-btn:hover { background: #ffe0e0; border-color: #e08080; color: #a02020; transform: scale(1.04); }
