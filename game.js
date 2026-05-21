@@ -153,7 +153,11 @@
       return dot>=0 ? {px:cwx,py:cwy} : {px:-cwx,py:-cwy};
     }
     const p20=perpToCenter(a20,cx20,cy20);
-    const p30=perpToCenter(a30,cx30,cy30);
+    const p30raw=perpToCenter(a30,cx30,cy30);
+    // cp2 must lie on the sq20 side of sq30 so the bezier doesn't overshoot
+    const toSq20x=cx20-cx30, toSq20y=cy20-cy30;
+    const p30=(p30raw.px*toSq20x+p30raw.py*toSq20y>=0)
+      ? p30raw : {px:-p30raw.px, py:-p30raw.py};
 
     const chordLen=Math.sqrt((cx30-cx20)**2+(cy30-cy20)**2);
     const exitLen=chordLen*0.58;
