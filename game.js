@@ -533,16 +533,16 @@
       const forced=getForcedRoute(st);
       if(forced){
         if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
-        await saveRoll(st,newPos,forced);
+        await saveRoll(st,newPos,forced,roll);
         return;
       }
-      pendingRoll={st,newPos};
+      pendingRoll={st,newPos,roll};
       $('route-overlay').classList.remove('hidden');
       return;
     }
     if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
     const newRoute=(st.route&&newPos>=BRANCH_END)?null:(st.route||null);
-    await saveRoll(st,newPos,newRoute);
+    await saveRoll(st,newPos,newRoute,roll);
   });
 
   function getForcedRoute(st){
@@ -630,8 +630,8 @@
     }
   }
 
-  async function saveRoll(st,newPos,route){
-    lastActionInfo={pid:myId,route:route||null,eventName:null,eventEffect:null};
+  async function saveRoll(st,newPos,route,roll=1){
+    lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null};
     const isGoal=newPos===100;
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
 
@@ -702,14 +702,14 @@
   $('btn-route-job').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
     if(!pendingRoll)return;
-    const {st,newPos}=pendingRoll; pendingRoll=null;
-    await saveRoll(st,newPos,'job');
+    const {st,newPos,roll}=pendingRoll; pendingRoll=null;
+    await saveRoll(st,newPos,'job',roll);
   });
   $('btn-route-uni').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
     if(!pendingRoll)return;
-    const {st,newPos}=pendingRoll; pendingRoll=null;
-    await saveRoll(st,newPos,'uni');
+    const {st,newPos,roll}=pendingRoll; pendingRoll=null;
+    await saveRoll(st,newPos,'uni',roll);
   });
 
   $('btn-event-ok').addEventListener('click',async()=>{
@@ -845,11 +845,12 @@
   bindItemCard($('player-status-area'));
 
   const DICE_FACE=['⚀','⚁','⚂','⚃','⚄','⚅'];
-  async function animateDice(result){
+  async function animateDice(result, playerName=''){
     const el=$('dice-result');
     const disp=$('dice-display');
     const face=$('dice-face-big');
     const stepsEl=$('dice-steps-big');
+    $('dice-player-label').textContent=playerName?playerName+' のサイコロ':'';
     el.textContent=''; stepsEl.textContent='';
     disp.classList.remove('hidden','landed'); disp.classList.add('rolling');
     const delays=[35,40,50,60,75,95,120,125];
@@ -1222,19 +1223,34 @@
   async function playOtherPlayerAction(action,fromSt,finalData){
     const toSt=getStats(finalData[action.pid]);
     const toPos=toSt.pos, toRoute=action.route;
+    const btn=$('btn-roll');
+    const wasDisabled=btn.disabled;
+    btn.disabled=true;
+
+    // サイコロ
+    if(action.roll){
+      const p=players.find(pl=>pl.player_id===action.pid);
+      await animateDice(action.roll, p?.player_name||'');
+      if(observerAnimCancel){btn.disabled=wasDisabled;playerData=finalData;drawBoard();return;}
+    }
+
+    // コマ移動
     playerData={...finalData,[action.pid]:fromSt};
     drawBoard();
     for(let pos=fromSt.pos+1;pos<=toPos;pos++){
-      if(observerAnimCancel){playerData=finalData;drawBoard();return;}
+      if(observerAnimCancel){btn.disabled=wasDisabled;playerData=finalData;drawBoard();return;}
       const midRoute=(pos>BRANCH_START&&pos<BRANCH_END)?(toRoute||fromSt.route||null):null;
       playerData={...playerData,[action.pid]:{...fromSt,pos,route:midRoute}};
       drawBoard();
       await sleep(120);
     }
+
     playerData=finalData;
     await arrivalAnimation(toPos,toRoute,action.pid);
     drawBoard();
     requestAnimationFrame(showStatDeltas);
+    btn.disabled=wasDisabled;
+
     if(action.eventName){
       await sleep(350);
       showObserverEventOverlay(action);
