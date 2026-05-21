@@ -72,6 +72,7 @@
   let myName='', roomId='', players=[], isHost=false, playerData={};
   let currentPlayerIndex=0, turnNumber=0, isMyTurn=false, rolling=false, channel=null;
   let pendingRoll = null, pendingCommit = null, prevPlayerData = {};
+  const processedImgCache = {};
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -444,6 +445,24 @@
     rb.style.display=(isMyTurn&&!myFinished)?'block':'none';rb.disabled=false;rolling=false;
     $('turn-number').textContent=turnNumber;
     renderPlayerStatusCards(idx);
+    requestAnimationFrame(processSlotImages);
+  }
+
+  function processSlotImages(){
+    document.querySelectorAll('.item-slot-img[data-item-img]').forEach(img=>{
+      const item=img.dataset.itemImg; if(!item) return;
+      if(processedImgCache[item]){ img.src=processedImgCache[item]; return; }
+      const loader=new Image();
+      loader.onload=()=>{
+        try{
+          const processed=removeWhiteBg(loader);
+          processedImgCache[item]=processed;
+          document.querySelectorAll(`.item-slot-img[data-item-img="${item}"]`).forEach(el=>{ el.src=processed; });
+        }catch(e){}
+      };
+      loader.onerror=()=>{};
+      loader.src=`items/${item}.png`;
+    });
   }
 
   function renderPlayerStatusCards(activeIdx){
@@ -452,8 +471,11 @@
       const routeLabel=st.route==='job'?' 💼就職':st.route==='uni'?' 🎓大学':'';
       const jobLabel=(st.job||'未定')+routeLabel;
       const isMine=p.player_id===myId;
+      const bg=item=>ITEM_BG[item]||'linear-gradient(135deg,#c6d9f6,#deeeff)';
       const itemsHtml=st.items.map(item=>
-        item?`<div class="item-slot filled" data-item="${item}">${item}</div>`
+        item?`<div class="item-slot filled" data-item="${item}" style="background:${bg(item)}">
+                <img class="item-slot-img" src="" data-item-img="${item}" alt="${item}">
+              </div>`
             :`<div class="item-slot">∅</div>`
       ).join('');
       return `
