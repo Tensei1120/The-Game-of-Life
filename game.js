@@ -483,6 +483,8 @@
       const ev=pickEvent(newPos,usedIds);
       if(ev){
         pendingCommit={newSt,newUsedIds:[...usedIds,ev.id],ev};
+        playerData={...playerData,[myId]:newSt};
+        drawBoard();
         showEventOverlay(ev);
         return;
       }
