@@ -487,6 +487,7 @@
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
 
     await animateMove(st, newPos, route);
+    await arrivalAnimation(newPos, route);
 
     const newSt=clampStats({...st, pos:newPos,
       route:isGoal?null:(route||null),
@@ -499,7 +500,7 @@
       const ev=pickEvent(newPos,usedIds);
       if(ev){
         pendingCommit={newSt,newUsedIds:[...usedIds,ev.id],ev};
-        await sleep(400);
+        await sleep(350);
         showEventOverlay(ev);
         return;
       }
@@ -588,9 +589,54 @@
   const DICE_FACE=['⚀','⚁','⚂','⚃','⚄','⚅'];
   async function animateDice(result){
     const el=$('dice-result');
-    for(let i=0;i<10;i++){el.textContent=DICE_FACE[Math.floor(Math.random()*6)];await sleep(60);}
+    const disp=$('dice-display');
+    const face=$('dice-face-big');
+    const stepsEl=$('dice-steps-big');
+    el.textContent=''; stepsEl.textContent='';
+    disp.classList.remove('hidden','landed'); disp.classList.add('rolling');
+    const delays=[50,50,55,60,65,75,90,115,150,200,255,320];
+    for(const d of delays){
+      const f=DICE_FACE[Math.floor(Math.random()*6)];
+      el.textContent=f; face.textContent=f; await sleep(d);
+    }
+    face.textContent=DICE_FACE[result-1];
+    stepsEl.textContent=result+'マス進む！';
     el.textContent=DICE_FACE[result-1]+'　'+result+'マス進む！';
+    disp.classList.remove('rolling'); disp.classList.add('landed');
+    await sleep(850);
+    disp.classList.add('hidden'); disp.classList.remove('landed');
   }
+
+  async function arrivalAnimation(pos, route){
+    const sq=getBranchSq(pos,route)||squares[pos];
+    if(!sq)return;
+    const p=players.find(pl=>pl.player_id===myId);
+    if(!p)return;
+    for(const scale of [1.65,1.0,1.35,1.0,1.15,1.0]){
+      drawBoard();
+      if(scale>1.0) drawPulseToken(sq.cx,sq.cy,p,scale);
+      await sleep(90);
+    }
+  }
+  function drawPulseToken(tx,ty,p,scale){
+    const R=16*scale;
+    ctx.save();
+    ctx.globalAlpha=0.55; ctx.beginPath(); ctx.arc(tx,ty,R+10,0,Math.PI*2);
+    ctx.strokeStyle=p.color; ctx.lineWidth=4;
+    ctx.shadowColor=p.color; ctx.shadowBlur=22; ctx.stroke();
+    ctx.globalAlpha=1; ctx.shadowBlur=12; ctx.shadowOffsetY=5;
+    ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2);
+    ctx.fillStyle=p.color; ctx.fill(); ctx.restore();
+    const tg=ctx.createRadialGradient(tx-R*.3,ty-R*.3,R*.05,tx,ty,R);
+    tg.addColorStop(0,'rgba(255,255,255,0.62)'); tg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=tg; ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.92)'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font=`bold ${Math.round(11*scale)}px Segoe UI`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(p.player_name[0].toUpperCase(),tx,ty);
+  }
+
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
   // ── ボード描画 ──

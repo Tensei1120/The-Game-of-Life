@@ -363,6 +363,40 @@ body {
 .dissolution-title { font-size: 1.4rem; font-weight: 700; color: #e03030; }
 .dissolution-sub { font-size: .95rem; color: #8090a8; line-height: 1.8; }
 
+/* サイコロ表示オーバーレイ */
+#dice-display {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,10,40,.3); z-index: 180; pointer-events: none;
+}
+.dice-card {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: rgba(255,255,255,.97); border-radius: 28px; padding: 36px 64px;
+  box-shadow: 0 12px 48px rgba(0,0,0,.35);
+}
+#dice-face-big {
+  font-size: 96px; line-height: 1; display: block;
+}
+#dice-display.rolling #dice-face-big {
+  animation: diceShake .13s ease-in-out infinite;
+}
+#dice-display.landed #dice-face-big {
+  animation: diceLand .38s cubic-bezier(.17,.67,.35,1.5);
+}
+@keyframes diceShake {
+  0%   { transform: rotate(-20deg) scale(.85); }
+  50%  { transform: rotate(20deg)  scale(1.15); }
+  100% { transform: rotate(-20deg) scale(.85); }
+}
+@keyframes diceLand {
+  0%   { transform: scale(1.55) rotate(-6deg); }
+  55%  { transform: scale(.86)  rotate(3deg); }
+  78%  { transform: scale(1.08) rotate(-1deg); }
+  100% { transform: scale(1)    rotate(0); }
+}
+#dice-steps-big {
+  font-size: 1.4rem; font-weight: 800; color: #e06000; letter-spacing: .05em; min-height: 1.7rem;
+}
+
 /* イベントオーバーレイ */
 #event-overlay {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
