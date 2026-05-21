@@ -363,9 +363,7 @@
     players.forEach(p=>{
       const st=defaultStats(0);
       const startItems=rollStartItems();
-      const newSlots=[];
-      startItems.forEach((item,i)=>{ if(i<st.items.length){st.items[i]=item;newSlots.push(i);} });
-      st.__new_item_slots=newSlots;
+      startItems.forEach((item,i)=>{ if(i<st.items.length) st.items[i]=item; });
       initData[p.player_id]=st;
     });
     await sb.from('rooms').update({status:'playing',alive_cells:initData}).eq('id',roomId);
