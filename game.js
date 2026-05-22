@@ -74,7 +74,7 @@
   const processedImgCache = {};
   let itemAcquisitionQueue = [], itemAcquisitionActive = false, gameStartShown = false;
   let lastActionInfo = null, observerAnimCancel = false, observerAnimating = false;
-  let broadcastHandledPid = null, pendingObserverEvent = null;
+  let broadcastHandledPid = null, pendingObserverEvent = null, myActionPending = false;
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -410,14 +410,17 @@
   canvas.width=CW; canvas.height=CH;
 
   function applyRoomState(room){
+    // 自分のターンの Phase 1 通知（即時 DB 書き込み）は無視する
+    if(myActionPending) return;
+
     const newRoomData=room.alive_cells||{};
     const action=newRoomData.__last_action;
     currentPlayerIndex=room.current_player_index||0;
     turnNumber=room.turn_number||0;
 
+    // observer アニメ中は playerData だけ更新（UI は触らない）
     if(observerAnimating){
       playerData=newRoomData;
-      updateTurnUI();
       return;
     }
 
@@ -426,7 +429,7 @@
     updateTurnUI();
 
     if(action&&action.pid!==myId){
-      // broadcast が先に届いてアニメ済みなら再アニメしない
+      // broadcast または Phase 1 DB でアニメ済みなら stat delta だけ表示
       if(action.pid===broadcastHandledPid){
         broadcastHandledPid=null;
         drawBoard();
@@ -434,16 +437,17 @@
         return;
       }
       broadcastHandledPid=null;
-      // broadcast が届かなかった場合の DB フォールバック
-      const fromSt=getStats(prevPlayerData[action.pid]);
-      const toSt=getStats(newRoomData[action.pid]);
-      if(fromSt.pos!==toSt.pos){
+      // fromPos/toPos は action に明示されているので DB の player 状態に依存しない
+      const fromPos=action.fromPos??getStats(prevPlayerData[action.pid]).pos;
+      const toPos=action.toPos??getStats(newRoomData[action.pid]).pos;
+      if(fromPos!==toPos){
+        const fromSt={...getStats(prevPlayerData[action.pid]),pos:fromPos};
         observerAnimCancel=true;
         setTimeout(()=>{
           observerAnimCancel=false;
           runObserverAnimation(
-            action.pid, action.roll||1, fromSt, toSt.pos, action.route||null,
-            action.eventName||null, action.eventEffect||null
+            action.pid,action.roll||1,fromSt,toPos,action.route||null,
+            action.eventName||null,action.eventEffect||null
           );
         },80);
         return;
@@ -648,27 +652,29 @@
 
   async function saveRoll(st,newPos,route,roll=1){
     const isGoal=newPos===100;
-    // イベントをアニメ前に決定して broadcast に含める
     const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
     const preEv=(!isGoal&&isEventSquare(newPos))?pickEvent(newPos,usedIds):null;
     const evName=preEv?substitutePlayerName(preEv.name,myName):null;
     const evEffect=preEv?effectsText(preEv):null;
 
-    lastActionInfo={pid:myId,route:route||null,roll,eventName:evName,eventEffect:evEffect};
-    // 移動先・サイコロ・イベント情報をまとめて即時通知
+    // fromPos/toPos を明示することで Phase1 書き込み後でも observer がアニメ位置を把握できる
+    lastActionInfo={pid:myId,route:route||null,roll,fromPos:st.pos,toPos:newPos,eventName:evName,eventEffect:evEffect};
+
+    // Broadcast（届けば最速 ~50ms）
     channel.send({type:'broadcast',event:'turn_action',payload:{
-      pid:myId, roll, fromPos:st.pos, toPos:newPos, route:route||null,
-      eventName:evName, eventEffect:evEffect
+      pid:myId,roll,fromPos:st.pos,toPos:newPos,route:route||null,eventName:evName,eventEffect:evEffect
     }}).catch(()=>{});
 
+    // Phase 1: Broadcast が届かない端末向けに即座に DB 通知（アニメ開始前）
+    myActionPending=true;
+    sb.from('rooms').update({alive_cells:{...playerData,__last_action:{...lastActionInfo}}})
+      .eq('id',roomId).catch(()=>{});
+
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
+    await animateMove(st,newPos,route);
+    await arrivalAnimation(newPos,route);
 
-    await animateMove(st, newPos, route);
-    await arrivalAnimation(newPos, route);
-
-    const newSt=clampStats({...st, pos:newPos,
-      route:isGoal?null:(route||null),
-      finished:isGoal||!!st.finished});
+    const newSt=clampStats({...st,pos:newPos,route:isGoal?null:(route||null),finished:isGoal||!!st.finished});
     playerData={...playerData,[myId]:newSt};
     drawBoard();
 
@@ -708,6 +714,7 @@
         alive_cells:newData, status:'finished',
         current_player_index:currentPlayerIndex, turn_number:turnNumber,
       }).eq('id',roomId);
+      myActionPending=false;
       return;
     }
     let nextIndex=(currentPlayerIndex+1)%players.length;
@@ -721,6 +728,7 @@
       current_player_index:nextIndex,
       turn_number:wrapped?turnNumber+1:turnNumber,
     }).eq('id',roomId);
+    myActionPending=false;
   }
 
   $('btn-route-job').addEventListener('click',async()=>{
@@ -1212,11 +1220,13 @@
     playerData={...playerData,[pid]:{...getStats(playerData[pid]),pos:toPos,route:toRoute||null}};
     await arrivalAnimation(toPos,toRoute,pid);
 
+    // Phase 2（最終 DB 書き込み）が来ても再アニメしないようにフラグをセット
+    broadcastHandledPid=pid;
     observerAnimating=false;
     drawBoard();
     btn.disabled=wasDisabled;
+    updateTurnUI();
 
-    // broadcast でイベント情報が届いている場合を優先、なければ DB フォールバックの eventName を使用
     const evInfo = (pendingObserverEvent?.pid===pid) ? pendingObserverEvent : null;
     if(evInfo){ pendingObserverEvent=null; }
     const evName = evInfo?.eventName || eventName;
