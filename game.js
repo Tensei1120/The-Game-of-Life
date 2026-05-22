@@ -75,6 +75,7 @@
   const processedImgCache = {};
   let itemAcquisitionQueue = [], itemAcquisitionActive = false, gameStartShown = false;
   let lastActionInfo = null, observerAnimCancel = false, observerAnimating = false;
+  let broadcastHandledPid = null, pendingObserverEvent = null;
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -375,6 +376,8 @@
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},p=>onRoomChange(p.new))
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},()=>{if(!isHost)showDissolutionOverlay();})
       .on('postgres_changes',{event:'*',schema:'public',table:'room_players',filter:`room_id=eq.${roomId}`},()=>refreshPlayers())
+      .on('broadcast',{event:'turn_action'},({payload})=>onObserverBroadcast(payload))
+      .on('broadcast',{event:'turn_event'}, ({payload})=>onObserverEventBroadcast(payload))
       .subscribe();
   }
 
@@ -425,6 +428,15 @@
     updateTurnUI();
 
     if(action&&action.pid!==myId){
+      // broadcast が先に届いてアニメ済みなら再アニメしない
+      if(action.pid===broadcastHandledPid){
+        broadcastHandledPid=null;
+        drawBoard();
+        requestAnimationFrame(showStatDeltas);
+        return;
+      }
+      broadcastHandledPid=null;
+      // broadcast が届かなかった場合の DB フォールバック
       const fromSt=getStats(prevPlayerData[action.pid]);
       const toSt=getStats(newRoomData[action.pid]);
       if(fromSt.pos!==toSt.pos){
@@ -435,7 +447,7 @@
             action.pid, action.roll||1, fromSt, toSt.pos, action.route||null,
             action.eventName||null, action.eventEffect||null
           );
-        },100);
+        },80);
         return;
       }
     }
@@ -638,6 +650,10 @@
 
   async function saveRoll(st,newPos,route,roll=1){
     lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null};
+    // observer に即時通知（DB 更新より大幅に速い）
+    channel.send({type:'broadcast',event:'turn_action',payload:{
+      pid:myId, roll, fromPos:st.pos, toPos:newPos, route:route||null
+    }}).catch(()=>{});
 
     const isGoal=newPos===100;
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
@@ -724,6 +740,7 @@
     $('event-overlay').classList.add('hidden');
     if($('event-overlay').classList.contains('observer')){
       $('event-overlay').classList.remove('observer');
+      requestAnimationFrame(showStatDeltas);
       return;
     }
     const {newSt,newUsedIds,ev}=pendingCommit;
@@ -731,6 +748,12 @@
       lastActionInfo.eventName=substitutePlayerName(ev.name,myName);
       lastActionInfo.eventEffect=effectsText(ev);
     }
+    // イベント内容を observer に即時通知
+    channel.send({type:'broadcast',event:'turn_event',payload:{
+      pid:myId,
+      eventName:substitutePlayerName(ev.name,myName),
+      eventEffect:effectsText(ev)
+    }}).catch(()=>{});
     let st=applyEventToStats(newSt,ev);
     if(st._pendingItem){
       const pendingItem=st._pendingItem; delete st._pendingItem;
@@ -1159,6 +1182,23 @@
     showScreen('title-screen');
   });
 
+  function onObserverBroadcast(payload){
+    if(payload.pid===myId) return;
+    broadcastHandledPid=payload.pid;
+    prevPlayerData={...playerData};
+    observerAnimCancel=true;
+    const fromSt={...getStats(playerData[payload.pid]),pos:payload.fromPos,route:payload.fromRoute||null};
+    setTimeout(()=>{
+      observerAnimCancel=false;
+      runObserverAnimation(payload.pid,payload.roll||1,fromSt,payload.toPos,payload.route||null);
+    },30);
+  }
+
+  function onObserverEventBroadcast(payload){
+    if(payload.pid===myId) return;
+    pendingObserverEvent={pid:payload.pid,eventName:payload.eventName,eventEffect:payload.eventEffect};
+  }
+
   async function runObserverAnimation(pid,roll,fromSt,toPos,toRoute,eventName=null,eventEffect=null){
     observerAnimating=true;
     const btn=$('btn-roll');
@@ -1187,9 +1227,14 @@
     drawBoard();
     btn.disabled=wasDisabled;
 
-    if(eventName){
+    // broadcast でイベント情報が届いている場合を優先、なければ DB フォールバックの eventName を使用
+    const evInfo = (pendingObserverEvent?.pid===pid) ? pendingObserverEvent : null;
+    if(evInfo){ pendingObserverEvent=null; }
+    const evName = evInfo?.eventName || eventName;
+    const evEffect = evInfo?.eventEffect || eventEffect;
+    if(evName){
       await sleep(350);
-      showObserverEventOverlay({pid,eventName,eventEffect});
+      showObserverEventOverlay({pid,eventName:evName,eventEffect:evEffect});
     } else {
       requestAnimationFrame(showStatDeltas);
     }
