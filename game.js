@@ -29,7 +29,6 @@
     { id:8,  minPos:1, maxPos:10, name:'夏休みおばあちゃん家に行った！！', happiness:3 },
     { id:9,  minPos:1, maxPos:10, name:'ランドセルじゃんけん負けた…。', health:-1 },
     { id:10, minPos:1, maxPos:10, name:'バスケで突き指…。', happiness:-1, health:-2 },
-    { id:11, minPos:1, maxPos:10, name:'「別にあいつのことなんて好きじゃねえし！」', item:'好きな人' },
     { id:12, minPos:1, maxPos:10, name:'ドッチボール大会で優勝した！！', item:'友達', happiness:3 },
     { id:13, minPos:1, maxPos:10, name:'スケボーで転んで骨折れた…。でもなんか包帯かっこいいかも！？', happiness:1, health:-4 },
   ];
