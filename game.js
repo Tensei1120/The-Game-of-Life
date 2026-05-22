@@ -376,7 +376,6 @@
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},()=>{if(!isHost)showDissolutionOverlay();})
       .on('postgres_changes',{event:'*',schema:'public',table:'room_players',filter:`room_id=eq.${roomId}`},()=>refreshPlayers())
       .on('broadcast',{event:'turn_action'},({payload})=>onObserverBroadcast(payload))
-      .on('broadcast',{event:'turn_event'}, ({payload})=>onObserverEventBroadcast(payload))
       .subscribe();
   }
 
@@ -648,13 +647,20 @@
   }
 
   async function saveRoll(st,newPos,route,roll=1){
-    lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null};
-    // observer に即時通知（DB 更新より大幅に速い）
+    const isGoal=newPos===100;
+    // イベントをアニメ前に決定して broadcast に含める
+    const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
+    const preEv=(!isGoal&&isEventSquare(newPos))?pickEvent(newPos,usedIds):null;
+    const evName=preEv?substitutePlayerName(preEv.name,myName):null;
+    const evEffect=preEv?effectsText(preEv):null;
+
+    lastActionInfo={pid:myId,route:route||null,roll,eventName:evName,eventEffect:evEffect};
+    // 移動先・サイコロ・イベント情報をまとめて即時通知
     channel.send({type:'broadcast',event:'turn_action',payload:{
-      pid:myId, roll, fromPos:st.pos, toPos:newPos, route:route||null
+      pid:myId, roll, fromPos:st.pos, toPos:newPos, route:route||null,
+      eventName:evName, eventEffect:evEffect
     }}).catch(()=>{});
 
-    const isGoal=newPos===100;
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
 
     await animateMove(st, newPos, route);
@@ -666,18 +672,13 @@
     playerData={...playerData,[myId]:newSt};
     drawBoard();
 
-    if(!isGoal&&isEventSquare(newPos)){
-      const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
-      const ev=pickEvent(newPos,usedIds);
-      if(ev){
-        // イベント内容を observer に broadcast
-        pendingCommit={newSt,newUsedIds:[...usedIds,ev.id],ev};
-        await sleep(350);
-        showEventOverlay(ev);
-        return;
-      }
+    if(preEv){
+      pendingCommit={newSt,newUsedIds:[...usedIds,preEv.id],ev:preEv};
+      await sleep(350);
+      showEventOverlay(preEv);
+      return;
     }
-    await doCommitSave(newSt,Array.isArray(playerData.__used_events)?playerData.__used_events:[]);
+    await doCommitSave(newSt,usedIds);
   }
 
   function showEventOverlay(ev){
@@ -743,16 +744,6 @@
       return;
     }
     const {newSt,newUsedIds,ev}=pendingCommit;
-    if(lastActionInfo&&ev){
-      lastActionInfo.eventName=substitutePlayerName(ev.name,myName);
-      lastActionInfo.eventEffect=effectsText(ev);
-    }
-    // イベント内容を observer に即時通知
-    channel.send({type:'broadcast',event:'turn_event',payload:{
-      pid:myId,
-      eventName:substitutePlayerName(ev.name,myName),
-      eventEffect:effectsText(ev)
-    }}).catch(()=>{});
     let st=applyEventToStats(newSt,ev);
     if(st._pendingItem){
       const pendingItem=st._pendingItem; delete st._pendingItem;
@@ -1185,17 +1176,16 @@
     if(payload.pid===myId) return;
     broadcastHandledPid=payload.pid;
     prevPlayerData={...playerData};
+    // イベント情報も broadcast に含まれているので即座に保存
+    if(payload.eventName){
+      pendingObserverEvent={pid:payload.pid,eventName:payload.eventName,eventEffect:payload.eventEffect||''};
+    }
     observerAnimCancel=true;
     const fromSt={...getStats(playerData[payload.pid]),pos:payload.fromPos,route:payload.fromRoute||null};
     setTimeout(()=>{
       observerAnimCancel=false;
       runObserverAnimation(payload.pid,payload.roll||1,fromSt,payload.toPos,payload.route||null);
     },30);
-  }
-
-  function onObserverEventBroadcast(payload){
-    if(payload.pid===myId) return;
-    pendingObserverEvent={pid:payload.pid,eventName:payload.eventName,eventEffect:payload.eventEffect};
   }
 
   async function runObserverAnimation(pid,roll,fromSt,toPos,toRoute,eventName=null,eventEffect=null){
