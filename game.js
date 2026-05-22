@@ -74,7 +74,7 @@
   const processedImgCache = {};
   let itemAcquisitionQueue = [], itemAcquisitionActive = false, gameStartShown = false;
   let lastActionInfo = null, observerAnimCancel = false, observerAnimating = false;
-  let broadcastHandledPid = null, pendingObserverEvent = null, myActionPending = false;
+  let broadcastHandledPid = null, pendingObserverEvent = null;
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -410,13 +410,20 @@
   canvas.width=CW; canvas.height=CH;
 
   function applyRoomState(room){
-    // 自分のターンの Phase 1 通知（即時 DB 書き込み）は無視する
-    if(myActionPending) return;
-
     const newRoomData=room.alive_cells||{};
     const action=newRoomData.__last_action;
-    currentPlayerIndex=room.current_player_index||0;
-    turnNumber=room.turn_number||0;
+    const newCpi=room.current_player_index||0;
+    const newTurn=room.turn_number||0;
+
+    // 自分のアクションで、かつターンがまだ進んでいない = DB フォールバックの通知のみ更新
+    // （ターンが進んでいないということは、まだ自分の手番中 = UI を触ってはいけない）
+    if(action&&action.pid===myId&&newCpi===currentPlayerIndex&&newTurn===turnNumber){
+      playerData=newRoomData;
+      return;
+    }
+
+    currentPlayerIndex=newCpi;
+    turnNumber=newTurn;
 
     // observer アニメ中は playerData だけ更新（UI は触らない）
     if(observerAnimating){
@@ -429,7 +436,7 @@
     updateTurnUI();
 
     if(action&&action.pid!==myId){
-      // broadcast または Phase 1 DB でアニメ済みなら stat delta だけ表示
+      // すでにアニメ済み（broadcast or 先行 DB 通知）なら stat delta だけ
       if(action.pid===broadcastHandledPid){
         broadcastHandledPid=null;
         drawBoard();
@@ -437,9 +444,9 @@
         return;
       }
       broadcastHandledPid=null;
-      // fromPos/toPos は action に明示されているので DB の player 状態に依存しない
-      const fromPos=action.fromPos??getStats(prevPlayerData[action.pid]).pos;
-      const toPos=action.toPos??getStats(newRoomData[action.pid]).pos;
+      // fromPos/toPos を action から直接取得（DB の player 状態に依存しない）
+      const fromPos=action.fromPos!=null?action.fromPos:getStats(prevPlayerData[action.pid]).pos;
+      const toPos=action.toPos!=null?action.toPos:getStats(newRoomData[action.pid]).pos;
       if(fromPos!==toPos){
         const fromSt={...getStats(prevPlayerData[action.pid]),pos:fromPos};
         observerAnimCancel=true;
@@ -660,15 +667,10 @@
     // fromPos/toPos を明示することで Phase1 書き込み後でも observer がアニメ位置を把握できる
     lastActionInfo={pid:myId,route:route||null,roll,fromPos:st.pos,toPos:newPos,eventName:evName,eventEffect:evEffect};
 
-    // Broadcast（届けば最速 ~50ms）
+    // Broadcast で observer に即時通知
     channel.send({type:'broadcast',event:'turn_action',payload:{
       pid:myId,roll,fromPos:st.pos,toPos:newPos,route:route||null,eventName:evName,eventEffect:evEffect
     }}).catch(()=>{});
-
-    // Phase 1: Broadcast が届かない端末向けに即座に DB 通知（アニメ開始前）
-    myActionPending=true;
-    sb.from('rooms').update({alive_cells:{...playerData,__last_action:{...lastActionInfo}}})
-      .eq('id',roomId).catch(()=>{});
 
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
     await animateMove(st,newPos,route);
@@ -714,7 +716,6 @@
         alive_cells:newData, status:'finished',
         current_player_index:currentPlayerIndex, turn_number:turnNumber,
       }).eq('id',roomId);
-      myActionPending=false;
       return;
     }
     let nextIndex=(currentPlayerIndex+1)%players.length;
@@ -728,7 +729,6 @@
       current_player_index:nextIndex,
       turn_number:wrapped?turnNumber+1:turnNumber,
     }).eq('id',roomId);
-    myActionPending=false;
   }
 
   $('btn-route-job').addEventListener('click',async()=>{
