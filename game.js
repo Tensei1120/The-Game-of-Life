@@ -606,10 +606,8 @@
     return changed?{...st,items}:st;
   }
   function applyPerTurnEffects(st){
-    const newSlots=st.__new_item_slots||[];
     let money=st.money,happiness=st.happiness,health=st.health;
     for(let i=0;i<st.items.length;i++){
-      if(newSlots.includes(i)) continue;
       const item=st.items[i]; if(!item) continue;
       const pt=ITEMS[item]?.perTurn; if(!pt) continue;
       if(pt.money)     money     +=pt.money;
@@ -685,6 +683,12 @@
     const newSt=clampStats({...st,pos:newPos,route:isGoal?null:(route||null),finished:isGoal||!!st.finished});
     playerData={...playerData,[myId]:newSt};
     drawBoard();
+
+    // Phase 1: notify observers immediately after animation, before event overlay
+    if(lastActionInfo){
+      sb.from('rooms').update({alive_cells:{...playerData,__last_action:{...lastActionInfo}}})
+        .eq('id',roomId).catch(()=>{});
+    }
 
     if(preEv){
       pendingCommit={newSt,newUsedIds:[...usedIds,preEv.id],ev:preEv};
