@@ -19,7 +19,6 @@
   ];
 
   const EVENTS = [
-    // === 小学校時代 (1-10) ===
     { id:1,  minPos:1, maxPos:10, name:'この時間が、ずっと続くと思ってた。', item:'友達', happiness:2 },
     { id:2,  minPos:1, maxPos:10, name:'「はいはい、お母さんが全部悪いのね。お母さんは南極にでも行ってペンギンさん達と仲良く暮らしますから。（プレイヤー名）はお父さんと幸せに暮らして。」', happiness:-3 },
     { id:3,  minPos:1, maxPos:10, name:'昼休み鬼ごっこした！！', item:'友達', happiness:2, health:1 },
@@ -32,61 +31,6 @@
     { id:10, minPos:1, maxPos:10, name:'バスケで突き指…。', happiness:-1, health:-2 },
     { id:12, minPos:1, maxPos:10, name:'ドッチボール大会で優勝した！！', item:'友達', happiness:3 },
     { id:13, minPos:1, maxPos:10, name:'スケボーで転んで骨折れた…。でもなんか包帯かっこいいかも！？', happiness:1, health:-4 },
-    // === 中学校時代 (11-20) ===
-    { id:20, minPos:11, maxPos:19, name:'（プレイヤー名）に気になる人ができた…。どきどき。', happiness:4 },
-    { id:21, minPos:11, maxPos:19, name:'部活の試合で勝った！！チームのみんなと泣いた。', happiness:4, health:2 },
-    { id:22, minPos:11, maxPos:19, name:'定期テスト赤点だった…。', happiness:-2 },
-    { id:23, minPos:11, maxPos:19, name:'学校をさぼった。なんか解放された気がした。', happiness:2, health:1 },
-    { id:24, minPos:11, maxPos:19, name:'SNSで悪口書かれてた…。', happiness:-4 },
-    { id:25, minPos:11, maxPos:19, name:'修学旅行！ルームがちゃんと楽しかった。', happiness:3 },
-    { id:26, minPos:11, maxPos:19, name:'給食のデザートを（プレイヤー名）にくれた人がいた。嬉しかった。', happiness:2 },
-    { id:27, minPos:11, maxPos:19, name:'部活の朝練がきつすぎる。でも続けてる。', health:-2, happiness:1 },
-    { id:28, minPos:11, maxPos:19, name:'友達と喧嘩した。しばらく口きかなかった。', happiness:-3 },
-    { id:29, minPos:11, maxPos:19, name:'塾の先生が意外といい人だった。', happiness:2 },
-    // === 高校・大学受験 (21-30) ===
-    { id:30, minPos:21, maxPos:29, name:'文化祭でバンドやった。一瞬だけヒーローになれた気がした。', happiness:5 },
-    { id:31, minPos:21, maxPos:29, name:'受験勉強で睡眠不足続き…。', health:-3 },
-    { id:32, minPos:21, maxPos:29, name:'憧れの先輩に話しかけたら普通に話してくれた。', happiness:3 },
-    { id:33, minPos:21, maxPos:29, name:'バイト初めてのお給料！！', money:3, happiness:3 },
-    { id:34, minPos:21, maxPos:29, name:'夜中に友達と抜け出してコンビニ行った。たったそれだけで最高に楽しかった。', happiness:4 },
-    { id:35, minPos:21, maxPos:29, name:'補習授業で土曜日が潰れた。', happiness:-2 },
-    { id:36, minPos:21, maxPos:29, name:'彼氏・彼女ができた！！', happiness:5 },
-    { id:37, minPos:21, maxPos:29, name:'失恋した。しばらく何も手につかなかった。', happiness:-5 },
-    { id:38, minPos:21, maxPos:29, name:'部活を引退した。燃え尽きた感じもするけど達成感もある。', happiness:2 },
-    { id:39, minPos:21, maxPos:29, name:'模試でD判定。焦ってきた。', happiness:-3, health:-1 },
-    // === 社会人・就職期 (31-50) ===
-    { id:40, minPos:31, maxPos:49, name:'初任給で家族にご飯をご馳走した。', money:-3, happiness:5 },
-    { id:41, minPos:31, maxPos:49, name:'職場の飲み会でつぶれた。翌日死にそうだった。', health:-3, happiness:-1 },
-    { id:42, minPos:31, maxPos:49, name:'残業続きでヘトヘト。でも仕事が認められた。', health:-2, money:3 },
-    { id:43, minPos:31, maxPos:49, name:'同僚と意気投合して昼ごはんに行くようになった。', happiness:3 },
-    { id:44, minPos:31, maxPos:49, name:'上司にパワハラされた気がする。', happiness:-4, health:-2 },
-    { id:45, minPos:31, maxPos:49, name:'宝くじで3万円当たった！！', money:3, happiness:3 },
-    { id:46, minPos:31, maxPos:49, name:'車を買った。週末ドライブが楽しい。', money:-5, happiness:3 },
-    { id:47, minPos:31, maxPos:49, name:'風邪をこじらせて1週間寝込んだ。', health:-4, happiness:-2 },
-    { id:48, minPos:31, maxPos:49, name:'転職を考え始めた。もしかしたら自分にはもっと向いてることがあるかも。', happiness:1 },
-    { id:49, minPos:31, maxPos:49, name:'給料が上がった！！', money:5, happiness:3 },
-    // === 中堅社会人 (51-70) ===
-    { id:50, minPos:51, maxPos:69, name:'マイホームを買った。ローンが始まる。', money:-10, happiness:5 },
-    { id:51, minPos:51, maxPos:69, name:'子どもが生まれた。眠れない夜が続く。', health:-2, happiness:6 },
-    { id:52, minPos:51, maxPos:69, name:'親が入院した。遠方なので会いに行くのが大変だった。', money:-3, happiness:-3, health:-2 },
-    { id:53, minPos:51, maxPos:69, name:'健康診断でひっかかった。生活習慣を見直し中。', health:-3, happiness:-2 },
-    { id:54, minPos:51, maxPos:69, name:'久しぶりに昔の友達と再会した。あの頃に戻ったみたいだった。', happiness:4 },
-    { id:55, minPos:51, maxPos:69, name:'課長に昇進した！', money:5, happiness:3 },
-    { id:56, minPos:51, maxPos:69, name:'家のリフォームで思わぬ出費。', money:-8, happiness:-1 },
-    { id:57, minPos:51, maxPos:69, name:'子どもの運動会で（プレイヤー名）が1位でゴールした。泣いた。', happiness:5 },
-    { id:58, minPos:51, maxPos:69, name:'職場でメンタルが限界になり休職した。', health:-5, happiness:-5, money:-5 },
-    { id:59, minPos:51, maxPos:69, name:'投資でちょっと儲かった。', money:7, happiness:2 },
-    // === シニア・老後 (71-99) ===
-    { id:60, minPos:71, maxPos:99, name:'定年退職。長い間お疲れ様でした。', happiness:4 },
-    { id:61, minPos:71, maxPos:99, name:'孫が生まれた。かわいすぎて全財産あげたい。', happiness:7 },
-    { id:62, minPos:71, maxPos:99, name:'老眼が進んでスマホが見づらくなった。', health:-2, happiness:-1 },
-    { id:63, minPos:71, maxPos:99, name:'旅行に行った。ずっと行きたかった場所。', money:-5, happiness:5 },
-    { id:64, minPos:71, maxPos:99, name:'友人が先に逝ってしまった。', happiness:-5, health:-2 },
-    { id:65, minPos:71, maxPos:99, name:'趣味のサークルで若い人と仲良くなった。', happiness:4 },
-    { id:66, minPos:71, maxPos:99, name:'入院した。3週間。', health:-6, money:-5, happiness:-3 },
-    { id:67, minPos:71, maxPos:99, name:'子どもたちが家族で遊びにきた。賑やかで最高だった。', happiness:6 },
-    { id:68, minPos:71, maxPos:99, name:'昔の日記が出てきた。自分が若かった頃を思い出した。', happiness:3 },
-    { id:69, minPos:71, maxPos:99, name:'老後の貯金が思ったより少ない。', money:-5, happiness:-4 },
   ];
 
   const ITEMS = {
@@ -471,9 +415,10 @@
     const newCpi=room.current_player_index||0;
     const newTurn=room.turn_number||0;
 
-    // 自分のアクション通知は無視（doCommitSave が直接 UI を更新するため不要）
-    // playerData は doCommitSave 側で管理し、Realtime で上書きしない
+    // 自分のアクション通知（Phase1・Phase2）は UI を触らない
+    // doCommitSave が DB 書き込み後に直接 UI を更新するため Realtime は不要
     if(action&&action.pid===myId){
+      playerData=newRoomData;
       return;
     }
 
@@ -739,14 +684,14 @@
     playerData={...playerData,[myId]:newSt};
     drawBoard();
 
+    // Phase 1: notify observers immediately after animation, before event overlay
+    if(lastActionInfo){
+      sb.from('rooms').update({alive_cells:{...playerData,__last_action:{...lastActionInfo}}})
+        .eq('id',roomId).catch(()=>{});
+    }
+
     if(preEv){
       pendingCommit={newSt,newUsedIds:[...usedIds,preEv.id],ev:preEv};
-      // Phase 1: イベントがある場合のみ先行書き込み（OKボタンまで間があるので race condition なし）
-      // observer がイベントOKボタンを押す前にコマ移動を見られるようにする
-      if(lastActionInfo){
-        sb.from('rooms').update({alive_cells:{...playerData,__last_action:{...lastActionInfo}}})
-          .eq('id',roomId).catch(()=>{});
-      }
       await sleep(350);
       showEventOverlay(preEv);
       return;
