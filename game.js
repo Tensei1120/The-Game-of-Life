@@ -415,9 +415,9 @@
     const newCpi=room.current_player_index||0;
     const newTurn=room.turn_number||0;
 
-    // 自分のアクションで、かつターンがまだ進んでいない = DB フォールバックの通知のみ更新
-    // （ターンが進んでいないということは、まだ自分の手番中 = UI を触ってはいけない）
-    if(action&&action.pid===myId&&newCpi===currentPlayerIndex&&newTurn===turnNumber){
+    // 自分のアクション通知（Phase1・Phase2）は UI を触らない
+    // doCommitSave が DB 書き込み後に直接 UI を更新するため Realtime は不要
+    if(action&&action.pid===myId){
       playerData=newRoomData;
       return;
     }
@@ -726,12 +726,20 @@
       if(!getStats(newData[players[nextIndex].player_id]).finished) break;
       nextIndex=(nextIndex+1)%players.length;
     }
-    const wrapped=nextIndex<=currentPlayerIndex;
+    const nextTurn=nextIndex<=currentPlayerIndex?turnNumber+1:turnNumber;
     await sb.from('rooms').update({
       alive_cells:newData,
       current_player_index:nextIndex,
-      turn_number:wrapped?turnNumber+1:turnNumber,
+      turn_number:nextTurn,
     }).eq('id',roomId);
+    // DB 書き込み完了後に直接 UI を更新（Realtime 到着を待たない → freeze 防止）
+    prevPlayerData={...playerData};
+    playerData=newData;
+    currentPlayerIndex=nextIndex;
+    turnNumber=nextTurn;
+    drawBoard();
+    updateTurnUI();
+    requestAnimationFrame(showStatDeltas);
   }
 
   $('btn-route-job').addEventListener('click',async()=>{
