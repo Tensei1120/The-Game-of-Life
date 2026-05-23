@@ -552,24 +552,30 @@
   $('btn-roll').addEventListener('click',async()=>{
     if(!isMyTurn||rolling)return;
     rolling=true; $('btn-roll').disabled=true;
-    const roll=Math.floor(Math.random()*6)+1;
-    await animateDice(roll);
-    const st=getStats(playerData[myId]);
-    const newPos=calcLanding(st.pos,roll);
-    if(newPos===BRANCH_START&&!st.route){
-      const forced=getForcedRoute(st);
-      if(forced){
-        if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
-        await saveRoll(st,newPos,forced,roll);
+    try{
+      const roll=Math.floor(Math.random()*6)+1;
+      await animateDice(roll);
+      const st=getStats(playerData[myId]);
+      const newPos=calcLanding(st.pos,roll);
+      if(newPos===BRANCH_START&&!st.route){
+        const forced=getForcedRoute(st);
+        if(forced){
+          if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
+          await saveRoll(st,newPos,forced,roll);
+          return;
+        }
+        pendingRoll={st,newPos,roll};
+        $('route-overlay').classList.remove('hidden');
         return;
       }
-      pendingRoll={st,newPos,roll};
-      $('route-overlay').classList.remove('hidden');
-      return;
+      if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
+      const newRoute=(st.route&&newPos>=BRANCH_END)?null:(st.route||null);
+      await saveRoll(st,newPos,newRoute,roll);
+    }catch(e){
+      console.error('roll error:',e);
+      rolling=false;
+      $('btn-roll').disabled=false;
     }
-    if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
-    const newRoute=(st.route&&newPos>=BRANCH_END)?null:(st.route||null);
-    await saveRoll(st,newPos,newRoute,roll);
   });
 
   function getForcedRoute(st){
@@ -667,13 +673,10 @@
     const actionId=Date.now();
     lastActionInfo={pid:myId,actionId,route:route||null,roll,fromPos:st.pos,toPos:newPos,eventName:evName,eventEffect:evEffect};
 
-    // Broadcast（高速・不安定）と Phase 1 DB 書き込み（低速・確実）を両方送る
+    // Broadcast（高速・不安定）
     channel.send({type:'broadcast',event:'turn_action',payload:{
       pid:myId,actionId,roll,fromPos:st.pos,toPos:newPos,route:route||null,eventName:evName,eventEffect:evEffect
     }}).catch(()=>{});
-    // Phase 1: アニメ開始前に即時通知（Broadcast が届かない端末向けフォールバック）
-    sb.from('rooms').update({alive_cells:{...playerData,__last_action:{...lastActionInfo}}})
-      .eq('id',roomId).catch(()=>{});
 
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
     await animateMove(st,newPos,route);
@@ -715,24 +718,27 @@
     if(lastActionInfo){newData.__last_action={...lastActionInfo};lastActionInfo=null;}
     const finishedCount=players.filter(p=>getStats(newData[p.player_id]).finished).length;
     if(players.length>1&&finishedCount>=players.length-1){
-      await sb.from('rooms').update({
+      const {error:fe}=await sb.from('rooms').update({
         alive_cells:newData, status:'finished',
         current_player_index:currentPlayerIndex, turn_number:turnNumber,
       }).eq('id',roomId);
+      if(fe) throw fe;
       return;
     }
+    if(!players.length) throw new Error('players empty');
     let nextIndex=(currentPlayerIndex+1)%players.length;
     for(let i=0;i<players.length;i++){
       if(!getStats(newData[players[nextIndex].player_id]).finished) break;
       nextIndex=(nextIndex+1)%players.length;
     }
     const nextTurn=nextIndex<=currentPlayerIndex?turnNumber+1:turnNumber;
-    await sb.from('rooms').update({
+    const {error:ue}=await sb.from('rooms').update({
       alive_cells:newData,
       current_player_index:nextIndex,
       turn_number:nextTurn,
     }).eq('id',roomId);
-    // DB 書き込み完了後に直接 UI を更新（Realtime 到着を待たない → freeze 防止）
+    if(ue) throw ue;
+    // DB 書き込み完了後に直接 UI を更新（Realtime を待たない）
     prevPlayerData={...playerData};
     playerData=newData;
     currentPlayerIndex=nextIndex;
@@ -746,13 +752,13 @@
     $('route-overlay').classList.add('hidden');
     if(!pendingRoll)return;
     const {st,newPos,roll}=pendingRoll; pendingRoll=null;
-    await saveRoll(st,newPos,'job',roll);
+    try{ await saveRoll(st,newPos,'job',roll); }catch(e){ console.error('route-job:',e); rolling=false; $('btn-roll').disabled=false; }
   });
   $('btn-route-uni').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
     if(!pendingRoll)return;
     const {st,newPos,roll}=pendingRoll; pendingRoll=null;
-    await saveRoll(st,newPos,'uni',roll);
+    try{ await saveRoll(st,newPos,'uni',roll); }catch(e){ console.error('route-uni:',e); rolling=false; $('btn-roll').disabled=false; }
   });
 
   $('btn-event-ok').addEventListener('click',async()=>{
@@ -762,34 +768,46 @@
       requestAnimationFrame(showStatDeltas);
       return;
     }
-    const {newSt,newUsedIds,ev}=pendingCommit;
-    let st=applyEventToStats(newSt,ev);
-    if(st._pendingItem){
-      const pendingItem=st._pendingItem; delete st._pendingItem;
-      pendingCommit={newSt:st,newUsedIds,pendingItem};
-      showDiscardOverlay(st.items,pendingItem);
-      return;
+    try{
+      const {newSt,newUsedIds,ev}=pendingCommit;
+      let st=applyEventToStats(newSt,ev);
+      if(st._pendingItem){
+        const pendingItem=st._pendingItem; delete st._pendingItem;
+        pendingCommit={newSt:st,newUsedIds,pendingItem};
+        showDiscardOverlay(st.items,pendingItem);
+        return;
+      }
+      if(ev.item) queueItemAcquisition([ev.item]);
+      await doCommitSave(st,newUsedIds);
+    }catch(e){
+      console.error('event-ok:',e);
+      rolling=false;
+      $('btn-roll').disabled=false;
     }
-    if(ev.item) queueItemAcquisition([ev.item]);
-    await doCommitSave(st,newUsedIds);
   });
 
   $('discard-items').addEventListener('click',async e=>{
     const btn=e.target.closest('.discard-btn:not(.locked)');
     if(!btn)return;
     $('discard-overlay').classList.add('hidden');
-    const idx=parseInt(btn.dataset.idx);
-    const {newSt,newUsedIds,pendingItem}=pendingCommit;
-    let st={...newSt,items:[...newSt.items]};
-    if(idx<6){
-      const discarded=st.items[idx];
-      const onDiscard=ITEMS[discarded]?.onDiscard;
-      if(onDiscard?.money) st.money=(st.money||0)+onDiscard.money;
-      st.items[idx]=pendingItem;
-      st.__new_item_slots=[...(newSt.__new_item_slots||[]),idx];
-      queueItemAcquisition([pendingItem]);
+    try{
+      const idx=parseInt(btn.dataset.idx);
+      const {newSt,newUsedIds,pendingItem}=pendingCommit;
+      let st={...newSt,items:[...newSt.items]};
+      if(idx<6){
+        const discarded=st.items[idx];
+        const onDiscard=ITEMS[discarded]?.onDiscard;
+        if(onDiscard?.money) st.money=(st.money||0)+onDiscard.money;
+        st.items[idx]=pendingItem;
+        st.__new_item_slots=[...(newSt.__new_item_slots||[]),idx];
+        queueItemAcquisition([pendingItem]);
+      }
+      await doCommitSave(st,newUsedIds);
+    }catch(e){
+      console.error('discard:',e);
+      rolling=false;
+      $('btn-roll').disabled=false;
     }
-    await doCommitSave(st,newUsedIds);
   });
 
   function showStopMessage(pos){
