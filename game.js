@@ -532,7 +532,7 @@
         }catch(e){}
       };
       loader.onerror=()=>{ if(!loader.src.endsWith('.jpg')) loader.src=`items/${item}.jpg`; };
-      loader.src=`items/${item}.png`;
+      loader.src=ITEM_IMG[item]||`items/${item}.png`;
     });
   }
 
@@ -882,21 +882,34 @@
     'イーロン・マスクメロン': 'items/IMG_3682.jpg',
     '大選手養成ギプス':       'items/IMG_3685.jpg',
   };
+  // エッジから連結した白ピクセルのみ除去（内部の白は保持）
   function removeWhiteBg(srcImg){
     const cv=document.createElement('canvas');
     cv.width=srcImg.naturalWidth; cv.height=srcImg.naturalHeight;
     const c=cv.getContext('2d');
     c.drawImage(srcImg,0,0);
-    const data=c.getImageData(0,0,cv.width,cv.height), d=data.data;
-    for(let i=0;i<d.length;i+=4){
-      const r=d[i],g=d[i+1],b=d[i+2];
-      const sat=Math.max(r,g,b)-Math.min(r,g,b);
-      const bright=Math.min(r,g,b);
-      if(bright>210&&sat<50){
-        d[i+3]=Math.round(Math.max(0,(255-bright)*255/45));
-      }
+    const imgData=c.getImageData(0,0,cv.width,cv.height);
+    const d=imgData.data;
+    const w=cv.width, h=cv.height;
+    function isWhiteish(i){ return d[i+3]>200&&Math.min(d[i],d[i+1],d[i+2])>210&&(Math.max(d[i],d[i+1],d[i+2])-Math.min(d[i],d[i+1],d[i+2]))<50; }
+    const visited=new Uint8Array(w*h);
+    const queue=[];
+    function seed(px){ if(px<0||px>=w*h||visited[px])return; visited[px]=1; if(isWhiteish(px*4))queue.push(px); }
+    for(let x=0;x<w;x++){ seed(x); seed((h-1)*w+x); }
+    for(let y=1;y<h-1;y++){ seed(y*w); seed(y*w+w-1); }
+    let qi=0;
+    while(qi<queue.length){
+      const px=queue[qi++];
+      const i=px*4;
+      const bright=Math.min(d[i],d[i+1],d[i+2]);
+      d[i+3]=Math.round(Math.max(0,(255-bright)*255/45));
+      const x=px%w,y=Math.floor(px/w);
+      if(x>0)   seed(px-1);
+      if(x<w-1) seed(px+1);
+      if(y>0)   seed(px-w);
+      if(y<h-1) seed(px+w);
     }
-    c.putImageData(data,0,0);
+    c.putImageData(imgData,0,0);
     return cv.toDataURL('image/png');
   }
 
@@ -1378,7 +1391,7 @@
       };
       loader.onerror=()=>{ if(!loader.src.endsWith('.jpg')){ loader.src=`items/${item}.jpg`; }else{ img.classList.add('hidden'); } };
       img.classList.add('hidden');
-      loader.src=`items/${item}.png`;
+      loader.src=ITEM_IMG[item]||`items/${item}.png`;
     });
     overlay.classList.remove('hidden');
   }
