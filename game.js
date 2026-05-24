@@ -421,6 +421,7 @@
 
     if(observerAnimating){
       playerData=newRoomData;
+      updateTurnUI();
       return;
     }
 
@@ -1233,6 +1234,7 @@
     observerAnimating=false;
     drawBoard();
     btn.disabled=wasDisabled;
+    updateTurnUI();
 
     // broadcast でイベント情報が届いている場合を優先、なければ DB フォールバックの eventName を使用
     const evInfo = (pendingObserverEvent?.pid===pid) ? pendingObserverEvent : null;
