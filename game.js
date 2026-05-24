@@ -63,10 +63,10 @@
     '昭和親父':         { desc:'20マス目まで捨てられない\nグローブを守る',                                      undiscardableUntil:20, protects:['グローブ'] },
     'グローブ':         { desc:'毎ターン健康度+1',                                                              perTurn:{health:1} },
     '友達':             { desc:'毎ターン幸福度+3',                                                              perTurn:{happiness:3} },
-    '好きな人':         { desc:'毎ターン幸福度+3',                                                              perTurn:{happiness:3} },
+    '好きな人':         { desc:'（効果は後日設定）' },
     'イーロン・マスクメロン': { desc:'毎ターン50万円獲得\n捨てると200万円獲得',                               perTurn:{money:50},                      onDiscard:{money:200} },
     '大選手養成ギプス': { desc:'毎ターン幸福度-1・健康度-3',                                                    perTurn:{happiness:-1,health:-3} },
-    '根性':             { desc:'毎ターン健康度+2',                                                              perTurn:{health:2} },
+    '根性':             { desc:'（効果は後日設定）' },
   };
 
   function rollStartItems(){
@@ -724,9 +724,8 @@
 
   function setEventItemBg(requireItem){
     const bg=$('event-item-bg');
-    if(requireItem){
-      const src=ITEM_IMG[requireItem]||`items/${requireItem}.jpg`;
-      bg.style.backgroundImage=`url('${src}')`;
+    if(requireItem&&ITEM_IMG[requireItem]){
+      bg.style.backgroundImage=`url('${ITEM_IMG[requireItem]}')`;
       $('event-overlay').classList.add('has-item-bg');
     } else {
       bg.style.backgroundImage='';
@@ -869,8 +868,17 @@
     '大選手養成ギプス':     'linear-gradient(150deg,#c0c8d8 0%,#607090 100%)',
     '根性':                 'linear-gradient(150deg,#ff8c42 0%,#c04000 100%)',
   };
-  // アイテム名と対応しないファイル名を持つ画像のマッピング
+  // 全アイテムの画像パス（拡張子が .png のものは明示的に記載）
   const ITEM_IMG = {
+    '親のスネ':               'items/親のスネ.png',
+    '昭和親父':               'items/昭和親父.png',
+    '友達':                   'items/友達.png',
+    '教育ママ':               'items/教育ママ.jpg',
+    '塾のテキスト':           'items/塾のテキスト.jpg',
+    'ピアノ':                 'items/ピアノ.jpg',
+    '水泳教室':               'items/水泳教室.jpg',
+    '貧困家庭':               'items/貧困家庭.jpg',
+    'グローブ':               'items/グローブ.jpg',
     'イーロン・マスクメロン': 'items/IMG_3682.jpg',
     '大選手養成ギプス':       'items/IMG_3685.jpg',
   };
