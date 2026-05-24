@@ -494,7 +494,9 @@
     else{ind.textContent=(cp?.player_name||'?')+' のターン';ind.style.color=cp?.color||'#1565c0';}
     const myFinished=!!getStats(playerData[myId]).finished;
     const rb=$('btn-roll');
-    rb.style.display=(isMyTurn&&!myFinished)?'block':'none';rb.disabled=false;rolling=false;
+    rb.style.display=(isMyTurn&&!myFinished)?'block':'none';rb.disabled=false;
+    // rolling=true(ロール中)かつisMyTurn=trueの場合はリセットしない（event overlay表示中に再ロール防止）
+    if(!rolling||!isMyTurn) rolling=false;
     $('turn-number').textContent=turnNumber;
     renderPlayerStatusCards(idx);
     requestAnimationFrame(processSlotImages);
@@ -705,8 +707,8 @@
     playerData={...playerData,[myId]:newSt};
     drawBoard();
 
-    // Phase 1: イベントがある場合のみ observer への速報を DB 書き込み
-    if(preEv&&lastActionInfo){
+    // Phase 1: observer への速報（常に発火）。Bug2修正済みのため自分の Realtime は無視される
+    if(lastActionInfo){
       sb.from('rooms').update({alive_cells:{...playerData,__last_action:{...lastActionInfo}}})
         .eq('id',roomId).catch(()=>{});
     }
