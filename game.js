@@ -1220,16 +1220,19 @@
       if(observerAnimCancel){observerAnimating=false;observerRealtimeData=null;btn.disabled=wasDisabled;drawBoard();return;}
     }
 
-    playerData={...playerData,[pid]:fromSt};
+    // 位置のみ fromSt にリセット。金・幸福度等は現在の playerData[pid] を優先
+    // (Realtime がアニメ開始前に届いていた場合も正しい値を保持する)
+    playerData={...playerData,[pid]:{...(playerData[pid]||fromSt),pos:fromSt.pos,route:fromSt.route}};
     drawBoard();
     for(let pos=fromSt.pos+1;pos<=toPos;pos++){
       if(observerAnimCancel){observerAnimating=false;observerRealtimeData=null;btn.disabled=wasDisabled;drawBoard();return;}
       const midRoute=(pos>BRANCH_START&&pos<BRANCH_END)?(toRoute||fromSt.route||null):null;
-      playerData={...playerData,[pid]:{...fromSt,pos,route:midRoute}};
+      // fromSt ではなく現在の playerData[pid] を使用（Realtime 到着時のステータス更新を保持）
+      playerData={...playerData,[pid]:{...playerData[pid],pos,route:midRoute}};
       drawBoard();
       await sleep(120);
     }
-    playerData={...playerData,[pid]:{...getStats(playerData[pid]),pos:toPos,route:toRoute||null}};
+    playerData={...playerData,[pid]:{...playerData[pid],pos:toPos,route:toRoute||null}};
     await arrivalAnimation(toPos,toRoute,pid);
 
     observerAnimating=false;
