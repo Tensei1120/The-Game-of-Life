@@ -416,9 +416,11 @@
     currentPlayerIndex=room.current_player_index||0;
     turnNumber=room.turn_number||0;
 
+    // doCommitSave がローカル状態を既に更新済みなので Realtime は無視する
+    if(action&&action.pid===myId) return;
+
     if(observerAnimating){
       playerData=newRoomData;
-      updateTurnUI();
       return;
     }
 
@@ -590,17 +592,15 @@
     return changed?{...st,items}:st;
   }
   function applyPerTurnEffects(st){
-    const newSlots=st.__new_item_slots||[];
     let money=st.money,happiness=st.happiness,health=st.health;
     for(let i=0;i<st.items.length;i++){
-      if(newSlots.includes(i)) continue;
       const item=st.items[i]; if(!item) continue;
       const pt=ITEMS[item]?.perTurn; if(!pt) continue;
       if(pt.money)     money     +=pt.money;
       if(pt.happiness) happiness +=pt.happiness;
       if(pt.health)    health    +=pt.health;
     }
-    return{...st,money,happiness,health,__new_item_slots:[]};
+    return{...st,money,happiness,health};
   }
 
   function isEventSquare(pos){
@@ -714,12 +714,20 @@
       if(!getStats(newData[players[nextIndex].player_id]).finished) break;
       nextIndex=(nextIndex+1)%players.length;
     }
-    const wrapped=nextIndex<=currentPlayerIndex;
+    const nextTurn=nextIndex<=currentPlayerIndex?turnNumber+1:turnNumber;
     await sb.from('rooms').update({
       alive_cells:newData,
       current_player_index:nextIndex,
-      turn_number:wrapped?turnNumber+1:turnNumber,
+      turn_number:nextTurn,
     }).eq('id',roomId);
+    // Realtime 到着を待たずにローカル状態を即時更新
+    prevPlayerData={...playerData};
+    playerData=newData;
+    currentPlayerIndex=nextIndex;
+    turnNumber=nextTurn;
+    drawBoard();
+    updateTurnUI();
+    requestAnimationFrame(showStatDeltas);
   }
 
   $('btn-route-job').addEventListener('click',async()=>{
