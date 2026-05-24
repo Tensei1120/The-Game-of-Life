@@ -19,6 +19,7 @@
   ];
 
   const EVENTS = [
+    // ── 全員共通 ──
     { id:1,  minPos:1, maxPos:10, name:'この時間が、ずっと続くと思ってた。', item:'友達', happiness:2 },
     { id:2,  minPos:1, maxPos:10, name:'「はいはい、お母さんが全部悪いのね。お母さんは南極にでも行ってペンギンさん達と仲良く暮らしますから。（プレイヤー名）はお父さんと幸せに暮らして。」', happiness:-3 },
     { id:3,  minPos:1, maxPos:10, name:'昼休み鬼ごっこした！！', item:'友達', happiness:2, health:1 },
@@ -31,25 +32,48 @@
     { id:10, minPos:1, maxPos:10, name:'バスケで突き指…。', happiness:-1, health:-2 },
     { id:12, minPos:1, maxPos:10, name:'ドッチボール大会で優勝した！！', item:'友達', happiness:3 },
     { id:13, minPos:1, maxPos:10, name:'スケボーで転んで骨折れた…。でもなんか包帯かっこいいかも！？', happiness:1, health:-4 },
+    // ── 好きな人 限定 ──
+    { id:14, minPos:1, maxPos:10, requireItem:'好きな人', name:'別にあいつのことなんて好きじゃねえし！', happiness:-3, removeItem:'好きな人' },
+    // ── 親のスネ 限定 ──
+    { id:15, minPos:1, maxPos:10, requireItem:'親のスネ', name:'少年野球チームに入団！', item:'グローブ' },
+    { id:16, minPos:1, maxPos:10, requireItem:'親のスネ', name:'塾に入れられた…', item:'塾のテキスト' },
+    { id:17, minPos:1, maxPos:10, requireItem:'親のスネ', name:'ピアノ教室に入った', item:'ピアノ' },
+    { id:18, minPos:1, maxPos:10, requireItem:'親のスネ', name:'家族旅行で埼玉にいった。微妙だった。', happiness:1 },
+    { id:19, minPos:1, maxPos:10, requireItem:'親のスネ', name:'家族旅行で沖縄にいった！', happiness:4 },
+    // ── 教育ママ 限定 ──
+    { id:20, minPos:1, maxPos:10, requireItem:'教育ママ', name:'９０点取ったのにママに怒られた…', happiness:-4 },
+    { id:21, minPos:1, maxPos:10, requireItem:'教育ママ', name:'ママにお泊りはダメって言われた…', happiness:-2 },
+    { id:22, minPos:1, maxPos:10, requireItem:'教育ママ', name:'子役事務所に入れられた！', setJob:'俳優' },
+    // ── 貧困家庭 限定 ──
+    { id:23, minPos:1, maxPos:10, requireItem:'貧困家庭', name:'久しぶりの外食！それでも俺はチキンライスでいいや。', happiness:5, health:1 },
+    { id:24, minPos:1, maxPos:10, requireItem:'貧困家庭', name:'泣き腫らした目で、一般家庭を睨んだ。', happiness:-3, item:'根性' },
+    // ── 昭和親父 限定 ──
+    { id:25, minPos:1, maxPos:10, requireItem:'昭和親父', name:'地獄のトレーニングを受ける。', item:'大選手養成ギプス' },
+    { id:26, minPos:1, maxPos:10, requireItem:'昭和親父', name:'「地区大会で優勝したくらいで調子に乗るな！あんなろくでもない集団に１点でも取られたことを恥と思え馬鹿者！」', happiness:-3 },
   ];
 
   const ITEMS = {
-    '親のスネ':   { desc:'毎ターン3万円獲得\n幸福度+1・健康度+1',                                          perTurn:{money:3,happiness:1,health:1},  transformAt:{pos:50,into:'親のセワ'} },
-    '親のセワ':   { desc:'毎ターン5万円失う・健康度-2\n捨てられない',                                      perTurn:{money:-5,health:-2},            undiscardable:true,  disappearAt:90 },
-    '教育ママ':   { desc:'20マス目まで捨てられない\n塾のテキスト・ピアノ・水泳教室を守る\n20マス目で大学ルート強制', undiscardableUntil:20, protects:['塾のテキスト','ピアノ','水泳教室'], forceRoute:{pos:20,route:'uni'} },
-    '塾のテキスト':{ desc:'毎ターン幸福度-3\n20マス目で消滅',                                              perTurn:{happiness:-3},                  disappearAt:20 },
-    'ピアノ':     { desc:'毎ターン幸福度+1\n捨てると50万円獲得',                                          perTurn:{happiness:1},                   onDiscard:{money:50} },
-    '水泳教室':   { desc:'毎ターン健康度+1',                                                              perTurn:{health:1} },
-    '貧困家庭':   { desc:'毎ターン1万円失う・健康度-1\n所持金20万円超で消滅\n20マス目で就職ルート強制',   perTurn:{money:-1,health:-1},            disappearIfMoneyAbove:20, forceRoute:{pos:20,route:'job'} },
-    '昭和親父':   { desc:'20マス目まで捨てられない\nグローブを守る',                                      undiscardableUntil:20, protects:['グローブ'] },
-    'グローブ':   { desc:'毎ターン健康度+1',                                                              perTurn:{health:1} },
-    '友達':       { desc:'毎ターン幸福度+3',                                                              perTurn:{happiness:3} },
+    '親のスネ':         { desc:'毎ターン3万円獲得\n幸福度+1・健康度+1',                                          perTurn:{money:3,happiness:1,health:1},  transformAt:{pos:50,into:'親のセワ'} },
+    '親のセワ':         { desc:'毎ターン5万円失う・健康度-2\n捨てられない',                                      perTurn:{money:-5,health:-2},            undiscardable:true,  disappearAt:90 },
+    '教育ママ':         { desc:'20マス目まで捨てられない\n塾のテキスト・ピアノ・水泳教室を守る\n20マス目で大学ルート強制', undiscardableUntil:20, protects:['塾のテキスト','ピアノ','水泳教室'], forceRoute:{pos:20,route:'uni'} },
+    '塾のテキスト':     { desc:'毎ターン幸福度-3\n20マス目で消滅',                                              perTurn:{happiness:-3},                  disappearAt:20 },
+    'ピアノ':           { desc:'毎ターン幸福度+1\n捨てると50万円獲得',                                          perTurn:{happiness:1},                   onDiscard:{money:50} },
+    '水泳教室':         { desc:'毎ターン健康度+1',                                                              perTurn:{health:1} },
+    '貧困家庭':         { desc:'毎ターン1万円失う・健康度-1\n所持金20万円超で消滅\n20マス目で就職ルート強制',   perTurn:{money:-1,health:-1},            disappearIfMoneyAbove:20, forceRoute:{pos:20,route:'job'} },
+    '昭和親父':         { desc:'20マス目まで捨てられない\nグローブを守る',                                      undiscardableUntil:20, protects:['グローブ'] },
+    'グローブ':         { desc:'毎ターン健康度+1',                                                              perTurn:{health:1} },
+    '友達':             { desc:'毎ターン幸福度+3',                                                              perTurn:{happiness:3} },
+    '好きな人':         { desc:'毎ターン幸福度+3',                                                              perTurn:{happiness:3} },
+    'イーロン・マスクメロン': { desc:'毎ターン50万円獲得\n捨てると200万円獲得',                               perTurn:{money:50},                      onDiscard:{money:200} },
+    '大選手養成ギプス': { desc:'毎ターン幸福度-1・健康度-3',                                                    perTurn:{happiness:-1,health:-3} },
+    '根性':             { desc:'毎ターン健康度+2',                                                              perTurn:{health:2} },
   };
 
   function rollStartItems(){
     const r=Math.random();
     if(r<0.50) return ['親のスネ'];
-    if(r<0.70) return [];
+    if(r<0.69) return [];                         // 19%（元20%から1%削減）
+    if(r<0.70) return ['イーロン・マスクメロン']; // 1%
     if(r<0.80) return ['教育ママ','塾のテキスト','ピアノ','水泳教室'];
     if(r<0.90) return ['貧困家庭'];
     return ['昭和親父','グローブ'];
@@ -448,7 +472,7 @@
           observerAnimCancel=false;
           runObserverAnimation(
             action.pid, action.roll||1, fromSt, toSt.pos, action.route||null,
-            action.eventName||null, action.eventEffect||null
+            action.eventName||null, action.eventEffect||null, action.eventRequireItem||null
           );
         },80);
         return;
@@ -608,19 +632,29 @@
   function isEventSquare(pos){
     return pos>0&&pos<100&&!FORCED_STOPS.includes(pos);
   }
-  function pickEvent(pos,usedIds){
+  function pickEvent(pos,usedIds,items=[]){
     const av=EVENTS.filter(e=>pos>=e.minPos&&pos<=e.maxPos&&!usedIds.includes(e.id));
-    return av.length?av[Math.floor(Math.random()*av.length)]:null;
+    const conditional=av.filter(e=>e.requireItem&&items.includes(e.requireItem));
+    const general=av.filter(e=>!e.requireItem);
+    if(!conditional.length) return general.length?general[Math.floor(Math.random()*general.length)]:null;
+    // アイテム限定 50%、全員共通 50%
+    const pool=Math.random()<0.5?conditional:general;
+    if(pool.length) return pool[Math.floor(Math.random()*pool.length)];
+    // 片方が空の場合はもう一方から選ぶ
+    const fallback=pool===conditional?general:conditional;
+    return fallback.length?fallback[Math.floor(Math.random()*fallback.length)]:null;
   }
   function substitutePlayerName(text,name){
     return text.replace(/（プレイヤー名）|\(プレイヤー名\)/g,name);
   }
   function effectsText(ev){
     const p=[];
-    if(ev.item)      p.push(`アイテム「${ev.item}」を獲得！`);
-    if(ev.money)     p.push(ev.money>0?`${ev.money}万円 獲得！`:`${Math.abs(ev.money)}万円 失った...`);
-    if(ev.happiness) p.push(`幸福度 ${ev.happiness>0?'+':''}${ev.happiness}`);
-    if(ev.health)    p.push(`健康度 ${ev.health>0?'+':''}${ev.health}`);
+    if(ev.item)       p.push(`アイテム「${ev.item}」を獲得！`);
+    if(ev.removeItem) p.push(`アイテム「${ev.removeItem}」を失った…`);
+    if(ev.setJob)     p.push(`職業「${ev.setJob}」になる！`);
+    if(ev.money)      p.push(ev.money>0?`${ev.money}万円 獲得！`:`${Math.abs(ev.money)}万円 失った...`);
+    if(ev.happiness)  p.push(`幸福度 ${ev.happiness>0?'+':''}${ev.happiness}`);
+    if(ev.health)     p.push(`健康度 ${ev.health>0?'+':''}${ev.health}`);
     return p.join('\n');
   }
   function applyEventToStats(st,ev){
@@ -628,8 +662,14 @@
     if(ev.money)     next.money=st.money+ev.money;
     if(ev.happiness) next.happiness=st.happiness+ev.happiness;
     if(ev.health)    next.health=st.health+ev.health;
-    if(ev.item){
+    if(ev.setJob)    next.job=ev.setJob;
+    if(ev.removeItem){
       const items=[...st.items];
+      const idx=items.indexOf(ev.removeItem);
+      if(idx>=0){ items[idx]=null; next.items=items; }
+    }
+    if(ev.item){
+      const items=[...(next.items||st.items)];
       const slot=items.indexOf(null);
       if(slot>=0){
         items[slot]=ev.item; next.items=items;
@@ -650,7 +690,7 @@
   }
 
   async function saveRoll(st,newPos,route,roll=1){
-    lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null};
+    lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null,eventRequireItem:null};
     // observer に即時通知（DB 更新より大幅に速い）
     channel.send({type:'broadcast',event:'turn_action',payload:{
       pid:myId, roll, fromPos:st.pos, toPos:newPos, route:route||null
@@ -670,7 +710,7 @@
 
     if(!isGoal&&isEventSquare(newPos)){
       const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
-      const ev=pickEvent(newPos,usedIds);
+      const ev=pickEvent(newPos,usedIds,newSt.items);
       if(ev){
         // イベント内容を observer に broadcast
         pendingCommit={newSt,newUsedIds:[...usedIds,ev.id],ev};
@@ -682,7 +722,19 @@
     await doCommitSave(newSt,Array.isArray(playerData.__used_events)?playerData.__used_events:[]);
   }
 
+  function setEventItemBg(requireItem){
+    const bg=$('event-item-bg');
+    if(requireItem){
+      const src=ITEM_IMG[requireItem]||`items/${requireItem}.jpg`;
+      bg.style.backgroundImage=`url('${src}')`;
+      $('event-overlay').classList.add('has-item-bg');
+    } else {
+      bg.style.backgroundImage='';
+      $('event-overlay').classList.remove('has-item-bg');
+    }
+  }
   function showEventOverlay(ev){
+    setEventItemBg(ev.requireItem||null);
     $('event-name-text').textContent=substitutePlayerName(ev.name,myName);
     $('event-effect-text').textContent=effectsText(ev);
     $('event-overlay').classList.remove('hidden');
@@ -747,6 +799,8 @@
 
   $('btn-event-ok').addEventListener('click',async()=>{
     $('event-overlay').classList.add('hidden');
+    $('event-overlay').classList.remove('has-item-bg');
+    $('event-item-bg').style.backgroundImage='';
     if($('event-overlay').classList.contains('observer')){
       $('event-overlay').classList.remove('observer');
       requestAnimationFrame(showStatDeltas);
@@ -756,12 +810,14 @@
     if(lastActionInfo&&ev){
       lastActionInfo.eventName=substitutePlayerName(ev.name,myName);
       lastActionInfo.eventEffect=effectsText(ev);
+      lastActionInfo.eventRequireItem=ev.requireItem||null;
     }
     // イベント内容を observer に即時通知
     channel.send({type:'broadcast',event:'turn_event',payload:{
       pid:myId,
       eventName:substitutePlayerName(ev.name,myName),
-      eventEffect:effectsText(ev)
+      eventEffect:effectsText(ev),
+      requireItem:ev.requireItem||null
     }}).catch(()=>{});
     let st=applyEventToStats(newSt,ev);
     if(st._pendingItem){
@@ -798,16 +854,25 @@
 
   // ── アイテムカード（長押し） ──
   const ITEM_BG = {
-    '親のスネ':    'linear-gradient(150deg,#f5d97a 0%,#f0c040 100%)',
-    '親のセワ':    'linear-gradient(150deg,#9a8eb0 0%,#6b5f80 100%)',
-    '教育ママ':    'linear-gradient(150deg,#6aabee 0%,#3a7ecc 100%)',
-    '塾のテキスト':'linear-gradient(150deg,#e8d8b0 0%,#c8b080 100%)',
-    'ピアノ':      'linear-gradient(150deg,#4a4a6a 0%,#1e1e38 100%)',
-    '水泳教室':    'linear-gradient(150deg,#60d4ee 0%,#1a9ec0 100%)',
-    '貧困家庭':    'linear-gradient(150deg,#a0aa98 0%,#6a7462 100%)',
-    '昭和親父':    'linear-gradient(150deg,#e8a860 0%,#b86e28 100%)',
-    'グローブ':    'linear-gradient(150deg,#7ed87e 0%,#3aaa3a 100%)',
-    '友達':        'linear-gradient(150deg,#ffe97a 0%,#8dd87e 100%)',
+    '親のスネ':             'linear-gradient(150deg,#f5d97a 0%,#f0c040 100%)',
+    '親のセワ':             'linear-gradient(150deg,#9a8eb0 0%,#6b5f80 100%)',
+    '教育ママ':             'linear-gradient(150deg,#6aabee 0%,#3a7ecc 100%)',
+    '塾のテキスト':         'linear-gradient(150deg,#e8d8b0 0%,#c8b080 100%)',
+    'ピアノ':               'linear-gradient(150deg,#4a4a6a 0%,#1e1e38 100%)',
+    '水泳教室':             'linear-gradient(150deg,#60d4ee 0%,#1a9ec0 100%)',
+    '貧困家庭':             'linear-gradient(150deg,#a0aa98 0%,#6a7462 100%)',
+    '昭和親父':             'linear-gradient(150deg,#e8a860 0%,#b86e28 100%)',
+    'グローブ':             'linear-gradient(150deg,#7ed87e 0%,#3aaa3a 100%)',
+    '友達':                 'linear-gradient(150deg,#ffe97a 0%,#8dd87e 100%)',
+    '好きな人':             'linear-gradient(150deg,#ffb6c1 0%,#e75480 100%)',
+    'イーロン・マスクメロン':'linear-gradient(150deg,#b8f0a0 0%,#4caf50 100%)',
+    '大選手養成ギプス':     'linear-gradient(150deg,#c0c8d8 0%,#607090 100%)',
+    '根性':                 'linear-gradient(150deg,#ff8c42 0%,#c04000 100%)',
+  };
+  // アイテム名と対応しないファイル名を持つ画像のマッピング
+  const ITEM_IMG = {
+    'イーロン・マスクメロン': 'items/IMG_3682.jpg',
+    '大選手養成ギプス':       'items/IMG_3685.jpg',
   };
   function removeWhiteBg(srcImg){
     const cv=document.createElement('canvas');
@@ -853,7 +918,7 @@
       img.classList.remove('hidden');
     };
     loader.onerror=()=>{ if(!loader.src.endsWith('.jpg')) loader.src=`items/${item}.jpg`; };
-    loader.src=`items/${item}.png`;
+    loader.src=ITEM_IMG[item]||`items/${item}.png`;
     const overlay=$('item-card-overlay');
     acquired ? overlay.classList.add('acquire') : overlay.classList.remove('acquire');
     overlay.classList.remove('hidden');
@@ -1205,10 +1270,10 @@
 
   function onObserverEventBroadcast(payload){
     if(payload.pid===myId) return;
-    pendingObserverEvent={pid:payload.pid,eventName:payload.eventName,eventEffect:payload.eventEffect};
+    pendingObserverEvent={pid:payload.pid,eventName:payload.eventName,eventEffect:payload.eventEffect,requireItem:payload.requireItem||null};
   }
 
-  async function runObserverAnimation(pid,roll,fromSt,toPos,toRoute,eventName=null,eventEffect=null){
+  async function runObserverAnimation(pid,roll,fromSt,toPos,toRoute,eventName=null,eventEffect=null,eventRequireItem=null){
     observerAnimating=true;
     const btn=$('btn-roll');
     const wasDisabled=btn.disabled;
@@ -1250,9 +1315,10 @@
     if(evInfo){ pendingObserverEvent=null; }
     const evName = evInfo?.eventName || eventName;
     const evEffect = evInfo?.eventEffect || eventEffect;
+    const evRequireItem = evInfo?.requireItem ?? eventRequireItem;
     if(evName){
       await sleep(350);
-      showObserverEventOverlay({pid,eventName:evName,eventEffect:evEffect});
+      showObserverEventOverlay({pid,eventName:evName,eventEffect:evEffect,requireItem:evRequireItem});
     } else {
       requestAnimationFrame(showStatDeltas);
     }
@@ -1261,6 +1327,7 @@
   function showObserverEventOverlay(ev){
     const p=players.find(pl=>pl.player_id===ev.pid);
     $('event-observer-label').textContent=p?`${p.player_name} のイベント`:'';
+    setEventItemBg(ev.requireItem||null);
     $('event-name-text').textContent=ev.eventName||'';
     $('event-effect-text').textContent=ev.eventEffect||'';
     $('event-overlay').classList.add('observer');
