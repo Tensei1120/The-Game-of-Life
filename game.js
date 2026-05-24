@@ -418,6 +418,7 @@
     // 自分のアクション通知（Phase1・Phase2）は UI を触らない
     // doCommitSave が DB 書き込み後に直接 UI を更新するため Realtime は不要
     if(action&&action.pid===myId){
+      playerData=newRoomData;
       return;
     }
 
@@ -494,9 +495,7 @@
     else{ind.textContent=(cp?.player_name||'?')+' のターン';ind.style.color=cp?.color||'#1565c0';}
     const myFinished=!!getStats(playerData[myId]).finished;
     const rb=$('btn-roll');
-    rb.style.display=(isMyTurn&&!myFinished)?'block':'none';rb.disabled=false;
-    // rolling=true(ロール中)かつisMyTurn=trueの場合はリセットしない（event overlay表示中に再ロール防止）
-    if(!rolling||!isMyTurn) rolling=false;
+    rb.style.display=(isMyTurn&&!myFinished)?'block':'none';rb.disabled=false;rolling=false;
     $('turn-number').textContent=turnNumber;
     renderPlayerStatusCards(idx);
     requestAnimationFrame(processSlotImages);
@@ -555,53 +554,23 @@
     rolling=true; $('btn-roll').disabled=true;
     try{
       const roll=Math.floor(Math.random()*6)+1;
+      await animateDice(roll);
       const st=getStats(playerData[myId]);
       const newPos=calcLanding(st.pos,roll);
-      const actionId=Date.now();
-      const isGoal=newPos===100;
-      const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
-
       if(newPos===BRANCH_START&&!st.route){
         const forced=getForcedRoute(st);
-        if(!forced){
-          // ルート選択が必要：pos 20まで先にアニメし、選択後に DB commit
-          pendingRoll={st,newPos,roll,actionId,usedIds};
-          channel.send({type:'broadcast',event:'turn_action',payload:{
-            pid:myId,actionId,roll,fromPos:st.pos,toPos:newPos,route:null,eventName:null,eventEffect:null
-          }}).catch(()=>{});
+        if(forced){
           if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
-          await animateDice(roll,myName);
-          await animateMove(st,newPos,null);
-          await arrivalAnimation(newPos,null);
-          playerData={...playerData,[myId]:clampStats({...st,pos:newPos})};
-          drawBoard();
-          $('route-overlay').classList.remove('hidden');
+          await saveRoll(st,newPos,forced,roll);
           return;
         }
-        // 強制ルート
-        const preEv=isEventSquare(newPos)?pickEvent(newPos,usedIds):null;
-        const evName=preEv?substitutePlayerName(preEv.name,myName):null;
-        const evEffect=preEv?effectsText(preEv):null;
-        channel.send({type:'broadcast',event:'turn_action',payload:{
-          pid:myId,actionId,roll,fromPos:st.pos,toPos:newPos,route:forced,eventName:evName,eventEffect:evEffect
-        }}).catch(()=>{});
-        if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
-        await animateDice(roll,myName);
-        await saveRoll(st,newPos,forced,roll,actionId,preEv,usedIds);
+        pendingRoll={st,newPos,roll};
+        $('route-overlay').classList.remove('hidden');
         return;
       }
-
-      const newRoute=(st.route&&newPos>=BRANCH_END)?null:(st.route||null);
-      const preEv=(!isGoal&&isEventSquare(newPos))?pickEvent(newPos,usedIds):null;
-      const evName=preEv?substitutePlayerName(preEv.name,myName):null;
-      const evEffect=preEv?effectsText(preEv):null;
-      channel.send({type:'broadcast',event:'turn_action',payload:{
-        pid:myId,actionId,roll,fromPos:st.pos,toPos:newPos,route:newRoute,eventName:evName,eventEffect:evEffect
-      }}).catch(()=>{});
-      if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
       if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
-      await animateDice(roll,myName);
-      await saveRoll(st,newPos,newRoute,roll,actionId,preEv,usedIds);
+      const newRoute=(st.route&&newPos>=BRANCH_END)?null:(st.route||null);
+      await saveRoll(st,newPos,newRoute,roll);
     }catch(e){
       console.error('roll error:',e);
       rolling=false;
@@ -692,22 +661,30 @@
     }
   }
 
-  // actionId・preEv・usedIds はブロードキャスト前に btn-roll 側で計算済み
-  async function saveRoll(st,newPos,route,roll,actionId,preEv,usedIds){
+  async function saveRoll(st,newPos,route,roll=1){
     const isGoal=newPos===100;
+    const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
+    const preEv=(!isGoal&&isEventSquare(newPos))?pickEvent(newPos,usedIds):null;
     const evName=preEv?substitutePlayerName(preEv.name,myName):null;
     const evEffect=preEv?effectsText(preEv):null;
 
+    const actionId=Date.now();
     lastActionInfo={pid:myId,actionId,route:route||null,roll,fromPos:st.pos,toPos:newPos,eventName:evName,eventEffect:evEffect};
 
+    // Broadcast（高速・不安定）
+    channel.send({type:'broadcast',event:'turn_action',payload:{
+      pid:myId,actionId,roll,fromPos:st.pos,toPos:newPos,route:route||null,eventName:evName,eventEffect:evEffect
+    }}).catch(()=>{});
+
+    if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
     await animateMove(st,newPos,route);
-    if(st.pos!==newPos) await arrivalAnimation(newPos,route);
+    await arrivalAnimation(newPos,route);
 
     const newSt=clampStats({...st,pos:newPos,route:isGoal?null:(route||null),finished:isGoal||!!st.finished});
     playerData={...playerData,[myId]:newSt};
     drawBoard();
 
-    // Phase 1: observer への速報（常に発火）。Bug2修正済みのため自分の Realtime は無視される
+    // Phase 1: notify observers immediately after animation, before event overlay
     if(lastActionInfo){
       sb.from('rooms').update({alive_cells:{...playerData,__last_action:{...lastActionInfo}}})
         .eq('id',roomId).catch(()=>{});
@@ -778,19 +755,14 @@
   $('btn-route-job').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
     if(!pendingRoll)return;
-    const {newPos,roll,actionId,usedIds}=pendingRoll; pendingRoll=null;
-    // アニメは btn-roll 内で完了済み。現在の playerData[myId] (pos=20) を基点に DB commit
-    const stNow=getStats(playerData[myId]);
-    try{ await saveRoll(stNow,newPos,'job',roll,actionId,null,usedIds); }
-    catch(e){ console.error('route-job:',e); rolling=false; $('btn-roll').disabled=false; }
+    const {st,newPos,roll}=pendingRoll; pendingRoll=null;
+    try{ await saveRoll(st,newPos,'job',roll); }catch(e){ console.error('route-job:',e); rolling=false; $('btn-roll').disabled=false; }
   });
   $('btn-route-uni').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
     if(!pendingRoll)return;
-    const {newPos,roll,actionId,usedIds}=pendingRoll; pendingRoll=null;
-    const stNow=getStats(playerData[myId]);
-    try{ await saveRoll(stNow,newPos,'uni',roll,actionId,null,usedIds); }
-    catch(e){ console.error('route-uni:',e); rolling=false; $('btn-roll').disabled=false; }
+    const {st,newPos,roll}=pendingRoll; pendingRoll=null;
+    try{ await saveRoll(st,newPos,'uni',roll); }catch(e){ console.error('route-uni:',e); rolling=false; $('btn-roll').disabled=false; }
   });
 
   $('btn-event-ok').addEventListener('click',async()=>{
