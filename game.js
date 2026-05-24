@@ -74,7 +74,7 @@
   const processedImgCache = {};
   let itemAcquisitionQueue = [], itemAcquisitionActive = false, gameStartShown = false;
   let lastActionInfo = null, observerAnimCancel = false, observerAnimating = false;
-  let lastAnimatedActionId = null, pendingObserverEvent = null;
+  let broadcastHandledPid = null, pendingObserverEvent = null;
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -376,6 +376,7 @@
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},()=>{if(!isHost)showDissolutionOverlay();})
       .on('postgres_changes',{event:'*',schema:'public',table:'room_players',filter:`room_id=eq.${roomId}`},()=>refreshPlayers())
       .on('broadcast',{event:'turn_action'},({payload})=>onObserverBroadcast(payload))
+      .on('broadcast',{event:'turn_event'}, ({payload})=>onObserverEventBroadcast(payload))
       .subscribe();
   }
 
@@ -412,22 +413,12 @@
   function applyRoomState(room){
     const newRoomData=room.alive_cells||{};
     const action=newRoomData.__last_action;
-    const newCpi=room.current_player_index||0;
-    const newTurn=room.turn_number||0;
+    currentPlayerIndex=room.current_player_index||0;
+    turnNumber=room.turn_number||0;
 
-    // 自分のアクション通知（Phase1・Phase2）は UI を触らない
-    // doCommitSave が DB 書き込み後に直接 UI を更新するため Realtime は不要
-    if(action&&action.pid===myId){
-      playerData=newRoomData;
-      return;
-    }
-
-    currentPlayerIndex=newCpi;
-    turnNumber=newTurn;
-
-    // observer アニメ中は playerData だけ更新（UI は触らない）
     if(observerAnimating){
       playerData=newRoomData;
+      updateTurnUI();
       return;
     }
 
@@ -436,25 +427,24 @@
     updateTurnUI();
 
     if(action&&action.pid!==myId){
-      const actionKey=action.actionId?String(action.actionId):`${action.pid}-${action.fromPos}-${action.toPos}`;
-      // すでにアニメ開始済み（broadcast or Phase1）なら stat delta だけ更新
-      if(actionKey===lastAnimatedActionId){
+      // broadcast が先に届いてアニメ済みなら再アニメしない
+      if(action.pid===broadcastHandledPid){
+        broadcastHandledPid=null;
         drawBoard();
         requestAnimationFrame(showStatDeltas);
         return;
       }
-      lastAnimatedActionId=actionKey;
-      // fromPos/toPos を action から直接取得（DB の player 状態に依存しない）
-      const fromPos=action.fromPos!=null?action.fromPos:getStats(prevPlayerData[action.pid]).pos;
-      const toPos=action.toPos!=null?action.toPos:getStats(newRoomData[action.pid]).pos;
-      if(fromPos!==toPos){
-        const fromSt={...getStats(prevPlayerData[action.pid]),pos:fromPos};
+      broadcastHandledPid=null;
+      // broadcast が届かなかった場合の DB フォールバック
+      const fromSt=getStats(prevPlayerData[action.pid]);
+      const toSt=getStats(newRoomData[action.pid]);
+      if(fromSt.pos!==toSt.pos){
         observerAnimCancel=true;
         setTimeout(()=>{
           observerAnimCancel=false;
           runObserverAnimation(
-            action.pid,action.roll||1,fromSt,toPos,action.route||null,
-            action.eventName||null,action.eventEffect||null
+            action.pid, action.roll||1, fromSt, toSt.pos, action.route||null,
+            action.eventName||null, action.eventEffect||null
           );
         },80);
         return;
@@ -552,30 +542,24 @@
   $('btn-roll').addEventListener('click',async()=>{
     if(!isMyTurn||rolling)return;
     rolling=true; $('btn-roll').disabled=true;
-    try{
-      const roll=Math.floor(Math.random()*6)+1;
-      await animateDice(roll);
-      const st=getStats(playerData[myId]);
-      const newPos=calcLanding(st.pos,roll);
-      if(newPos===BRANCH_START&&!st.route){
-        const forced=getForcedRoute(st);
-        if(forced){
-          if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
-          await saveRoll(st,newPos,forced,roll);
-          return;
-        }
-        pendingRoll={st,newPos,roll};
-        $('route-overlay').classList.remove('hidden');
+    const roll=Math.floor(Math.random()*6)+1;
+    await animateDice(roll);
+    const st=getStats(playerData[myId]);
+    const newPos=calcLanding(st.pos,roll);
+    if(newPos===BRANCH_START&&!st.route){
+      const forced=getForcedRoute(st);
+      if(forced){
+        if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
+        await saveRoll(st,newPos,forced,roll);
         return;
       }
-      if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
-      const newRoute=(st.route&&newPos>=BRANCH_END)?null:(st.route||null);
-      await saveRoll(st,newPos,newRoute,roll);
-    }catch(e){
-      console.error('roll error:',e);
-      rolling=false;
-      $('btn-roll').disabled=false;
+      pendingRoll={st,newPos,roll};
+      $('route-overlay').classList.remove('hidden');
+      return;
     }
+    if(FORCED_STOPS.includes(newPos)&&newPos!==st.pos+roll)showStopMessage(newPos);
+    const newRoute=(st.route&&newPos>=BRANCH_END)?null:(st.route||null);
+    await saveRoll(st,newPos,newRoute,roll);
   });
 
   function getForcedRoute(st){
@@ -606,8 +590,10 @@
     return changed?{...st,items}:st;
   }
   function applyPerTurnEffects(st){
+    const newSlots=st.__new_item_slots||[];
     let money=st.money,happiness=st.happiness,health=st.health;
     for(let i=0;i<st.items.length;i++){
+      if(newSlots.includes(i)) continue;
       const item=st.items[i]; if(!item) continue;
       const pt=ITEMS[item]?.perTurn; if(!pt) continue;
       if(pt.money)     money     +=pt.money;
@@ -662,41 +648,36 @@
   }
 
   async function saveRoll(st,newPos,route,roll=1){
-    const isGoal=newPos===100;
-    const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
-    const preEv=(!isGoal&&isEventSquare(newPos))?pickEvent(newPos,usedIds):null;
-    const evName=preEv?substitutePlayerName(preEv.name,myName):null;
-    const evEffect=preEv?effectsText(preEv):null;
-
-    const actionId=Date.now();
-    lastActionInfo={pid:myId,actionId,route:route||null,roll,fromPos:st.pos,toPos:newPos,eventName:evName,eventEffect:evEffect};
-
-    // Broadcast（高速・不安定）
+    lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null};
+    // observer に即時通知（DB 更新より大幅に速い）
     channel.send({type:'broadcast',event:'turn_action',payload:{
-      pid:myId,actionId,roll,fromPos:st.pos,toPos:newPos,route:route||null,eventName:evName,eventEffect:evEffect
+      pid:myId, roll, fromPos:st.pos, toPos:newPos, route:route||null
     }}).catch(()=>{});
 
+    const isGoal=newPos===100;
     if(isGoal){ $('dice-result').textContent+='　🏆 ゴール！'; }
-    await animateMove(st,newPos,route);
-    await arrivalAnimation(newPos,route);
 
-    const newSt=clampStats({...st,pos:newPos,route:isGoal?null:(route||null),finished:isGoal||!!st.finished});
+    await animateMove(st, newPos, route);
+    await arrivalAnimation(newPos, route);
+
+    const newSt=clampStats({...st, pos:newPos,
+      route:isGoal?null:(route||null),
+      finished:isGoal||!!st.finished});
     playerData={...playerData,[myId]:newSt};
     drawBoard();
 
-    // Phase 1: notify observers immediately after animation, before event overlay
-    if(lastActionInfo){
-      sb.from('rooms').update({alive_cells:{...playerData,__last_action:{...lastActionInfo}}})
-        .eq('id',roomId).catch(()=>{});
+    if(!isGoal&&isEventSquare(newPos)){
+      const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
+      const ev=pickEvent(newPos,usedIds);
+      if(ev){
+        // イベント内容を observer に broadcast
+        pendingCommit={newSt,newUsedIds:[...usedIds,ev.id],ev};
+        await sleep(350);
+        showEventOverlay(ev);
+        return;
+      }
     }
-
-    if(preEv){
-      pendingCommit={newSt,newUsedIds:[...usedIds,preEv.id],ev:preEv};
-      await sleep(350);
-      showEventOverlay(preEv);
-      return;
-    }
-    await doCommitSave(newSt,usedIds);
+    await doCommitSave(newSt,Array.isArray(playerData.__used_events)?playerData.__used_events:[]);
   }
 
   function showEventOverlay(ev){
@@ -722,47 +703,36 @@
     if(lastActionInfo){newData.__last_action={...lastActionInfo};lastActionInfo=null;}
     const finishedCount=players.filter(p=>getStats(newData[p.player_id]).finished).length;
     if(players.length>1&&finishedCount>=players.length-1){
-      const {error:fe}=await sb.from('rooms').update({
+      await sb.from('rooms').update({
         alive_cells:newData, status:'finished',
         current_player_index:currentPlayerIndex, turn_number:turnNumber,
       }).eq('id',roomId);
-      if(fe) throw fe;
       return;
     }
-    if(!players.length) throw new Error('players empty');
     let nextIndex=(currentPlayerIndex+1)%players.length;
     for(let i=0;i<players.length;i++){
       if(!getStats(newData[players[nextIndex].player_id]).finished) break;
       nextIndex=(nextIndex+1)%players.length;
     }
-    const nextTurn=nextIndex<=currentPlayerIndex?turnNumber+1:turnNumber;
-    const {error:ue}=await sb.from('rooms').update({
+    const wrapped=nextIndex<=currentPlayerIndex;
+    await sb.from('rooms').update({
       alive_cells:newData,
       current_player_index:nextIndex,
-      turn_number:nextTurn,
+      turn_number:wrapped?turnNumber+1:turnNumber,
     }).eq('id',roomId);
-    if(ue) throw ue;
-    // DB 書き込み完了後に直接 UI を更新（Realtime を待たない）
-    prevPlayerData={...playerData};
-    playerData=newData;
-    currentPlayerIndex=nextIndex;
-    turnNumber=nextTurn;
-    drawBoard();
-    updateTurnUI();
-    requestAnimationFrame(showStatDeltas);
   }
 
   $('btn-route-job').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
     if(!pendingRoll)return;
     const {st,newPos,roll}=pendingRoll; pendingRoll=null;
-    try{ await saveRoll(st,newPos,'job',roll); }catch(e){ console.error('route-job:',e); rolling=false; $('btn-roll').disabled=false; }
+    await saveRoll(st,newPos,'job',roll);
   });
   $('btn-route-uni').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
     if(!pendingRoll)return;
     const {st,newPos,roll}=pendingRoll; pendingRoll=null;
-    try{ await saveRoll(st,newPos,'uni',roll); }catch(e){ console.error('route-uni:',e); rolling=false; $('btn-roll').disabled=false; }
+    await saveRoll(st,newPos,'uni',roll);
   });
 
   $('btn-event-ok').addEventListener('click',async()=>{
@@ -772,46 +742,44 @@
       requestAnimationFrame(showStatDeltas);
       return;
     }
-    try{
-      const {newSt,newUsedIds,ev}=pendingCommit;
-      let st=applyEventToStats(newSt,ev);
-      if(st._pendingItem){
-        const pendingItem=st._pendingItem; delete st._pendingItem;
-        pendingCommit={newSt:st,newUsedIds,pendingItem};
-        showDiscardOverlay(st.items,pendingItem);
-        return;
-      }
-      if(ev.item) queueItemAcquisition([ev.item]);
-      await doCommitSave(st,newUsedIds);
-    }catch(e){
-      console.error('event-ok:',e);
-      rolling=false;
-      $('btn-roll').disabled=false;
+    const {newSt,newUsedIds,ev}=pendingCommit;
+    if(lastActionInfo&&ev){
+      lastActionInfo.eventName=substitutePlayerName(ev.name,myName);
+      lastActionInfo.eventEffect=effectsText(ev);
     }
+    // イベント内容を observer に即時通知
+    channel.send({type:'broadcast',event:'turn_event',payload:{
+      pid:myId,
+      eventName:substitutePlayerName(ev.name,myName),
+      eventEffect:effectsText(ev)
+    }}).catch(()=>{});
+    let st=applyEventToStats(newSt,ev);
+    if(st._pendingItem){
+      const pendingItem=st._pendingItem; delete st._pendingItem;
+      pendingCommit={newSt:st,newUsedIds,pendingItem};
+      showDiscardOverlay(st.items,pendingItem);
+      return;
+    }
+    if(ev.item) queueItemAcquisition([ev.item]);
+    await doCommitSave(st,newUsedIds);
   });
 
   $('discard-items').addEventListener('click',async e=>{
     const btn=e.target.closest('.discard-btn:not(.locked)');
     if(!btn)return;
     $('discard-overlay').classList.add('hidden');
-    try{
-      const idx=parseInt(btn.dataset.idx);
-      const {newSt,newUsedIds,pendingItem}=pendingCommit;
-      let st={...newSt,items:[...newSt.items]};
-      if(idx<6){
-        const discarded=st.items[idx];
-        const onDiscard=ITEMS[discarded]?.onDiscard;
-        if(onDiscard?.money) st.money=(st.money||0)+onDiscard.money;
-        st.items[idx]=pendingItem;
-        st.__new_item_slots=[...(newSt.__new_item_slots||[]),idx];
-        queueItemAcquisition([pendingItem]);
-      }
-      await doCommitSave(st,newUsedIds);
-    }catch(e){
-      console.error('discard:',e);
-      rolling=false;
-      $('btn-roll').disabled=false;
+    const idx=parseInt(btn.dataset.idx);
+    const {newSt,newUsedIds,pendingItem}=pendingCommit;
+    let st={...newSt,items:[...newSt.items]};
+    if(idx<6){
+      const discarded=st.items[idx];
+      const onDiscard=ITEMS[discarded]?.onDiscard;
+      if(onDiscard?.money) st.money=(st.money||0)+onDiscard.money;
+      st.items[idx]=pendingItem;
+      st.__new_item_slots=[...(newSt.__new_item_slots||[]),idx];
+      queueItemAcquisition([pendingItem]);
     }
+    await doCommitSave(st,newUsedIds);
   });
 
   function showStopMessage(pos){
@@ -1215,25 +1183,19 @@
 
   function onObserverBroadcast(payload){
     if(payload.pid===myId) return;
-    const actionKey=payload.actionId?String(payload.actionId):`${payload.pid}-${payload.fromPos}-${payload.toPos}`;
-    // Phase 1 DB 書き込みが先に届いてアニメ開始済みの場合はイベント情報だけ補完して終了
-    if(actionKey===lastAnimatedActionId){
-      if(payload.eventName&&!pendingObserverEvent){
-        pendingObserverEvent={pid:payload.pid,eventName:payload.eventName,eventEffect:payload.eventEffect||''};
-      }
-      return;
-    }
-    lastAnimatedActionId=actionKey;
+    broadcastHandledPid=payload.pid;
     prevPlayerData={...playerData};
-    if(payload.eventName){
-      pendingObserverEvent={pid:payload.pid,eventName:payload.eventName,eventEffect:payload.eventEffect||''};
-    }
     observerAnimCancel=true;
     const fromSt={...getStats(playerData[payload.pid]),pos:payload.fromPos,route:payload.fromRoute||null};
     setTimeout(()=>{
       observerAnimCancel=false;
       runObserverAnimation(payload.pid,payload.roll||1,fromSt,payload.toPos,payload.route||null);
     },30);
+  }
+
+  function onObserverEventBroadcast(payload){
+    if(payload.pid===myId) return;
+    pendingObserverEvent={pid:payload.pid,eventName:payload.eventName,eventEffect:payload.eventEffect};
   }
 
   async function runObserverAnimation(pid,roll,fromSt,toPos,toRoute,eventName=null,eventEffect=null){
@@ -1263,8 +1225,8 @@
     observerAnimating=false;
     drawBoard();
     btn.disabled=wasDisabled;
-    updateTurnUI();
 
+    // broadcast でイベント情報が届いている場合を優先、なければ DB フォールバックの eventName を使用
     const evInfo = (pendingObserverEvent?.pid===pid) ? pendingObserverEvent : null;
     if(evInfo){ pendingObserverEvent=null; }
     const evName = evInfo?.eventName || eventName;
