@@ -74,7 +74,7 @@
   const processedImgCache = {};
   let itemAcquisitionQueue = [], itemAcquisitionActive = false, gameStartShown = false;
   let lastActionInfo = null, observerAnimCancel = false, observerAnimating = false;
-  let broadcastHandledPid = null, pendingObserverEvent = null;
+  let broadcastHandledPid = null, pendingObserverEvent = null, observerRealtimeData = null;
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -421,6 +421,7 @@
 
     if(observerAnimating){
       playerData=newRoomData;
+      observerRealtimeData=newRoomData;
       updateTurnUI();
       return;
     }
@@ -1216,13 +1217,13 @@
     if(roll){
       const p=players.find(pl=>pl.player_id===pid);
       await animateDice(roll,p?.player_name||'');
-      if(observerAnimCancel){observerAnimating=false;btn.disabled=wasDisabled;drawBoard();return;}
+      if(observerAnimCancel){observerAnimating=false;observerRealtimeData=null;btn.disabled=wasDisabled;drawBoard();return;}
     }
 
     playerData={...playerData,[pid]:fromSt};
     drawBoard();
     for(let pos=fromSt.pos+1;pos<=toPos;pos++){
-      if(observerAnimCancel){observerAnimating=false;btn.disabled=wasDisabled;drawBoard();return;}
+      if(observerAnimCancel){observerAnimating=false;observerRealtimeData=null;btn.disabled=wasDisabled;drawBoard();return;}
       const midRoute=(pos>BRANCH_START&&pos<BRANCH_END)?(toRoute||fromSt.route||null):null;
       playerData={...playerData,[pid]:{...fromSt,pos,route:midRoute}};
       drawBoard();
@@ -1232,6 +1233,11 @@
     await arrivalAnimation(toPos,toRoute,pid);
 
     observerAnimating=false;
+    if(observerRealtimeData){
+      // Realtime が animation 中に届いていた場合、正しい DB データで上書き
+      playerData=observerRealtimeData;
+      observerRealtimeData=null;
+    }
     drawBoard();
     btn.disabled=wasDisabled;
     updateTurnUI();
