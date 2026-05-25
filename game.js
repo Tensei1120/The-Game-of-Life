@@ -227,27 +227,22 @@
       };
     }
 
-    // Compute all centers first
-    const centers = [];
-    for (let n = 0; n <= HOSP_TOTAL; n++) centers.push(ptAt(n * spacing));
-
     const sqs = [];
     const ha = spacing / 2 - 3;
     for (let n = 0; n <= HOSP_TOTAL; n++) {
-      // Direction = vector between neighboring centers → matches the road drawn through centers
-      const prev = centers[Math.max(0, n-1)], next = centers[Math.min(HOSP_TOTAL, n+1)];
-      const angle = Math.atan2(next.cy - prev.cy, next.cx - prev.cx);
-      const p = perp(angle);
-      const cos = Math.cos(angle), sin = Math.sin(angle);
-      const c = centers[n];
+      const cDist = n * spacing;
+      const center = ptAt(cDist);
+      const back  = ptAt(cDist - ha);
+      const front = ptAt(cDist + ha);
       const hw = n===HOSP_TOTAL ? SQ_ACROSS*0.75/2 : SQ_ACROSS/2;
+      const bP = perp(back.angle), fP = perp(front.angle);
       sqs.push({
-        num: n, cx: c.cx, cy: c.cy,
+        num: n, cx: center.cx, cy: center.cy,
         corners: [
-          { x: c.cx - cos*ha + p.nx*hw, y: c.cy - sin*ha + p.ny*hw },
-          { x: c.cx + cos*ha + p.nx*hw, y: c.cy + sin*ha + p.ny*hw },
-          { x: c.cx + cos*ha - p.nx*hw, y: c.cy + sin*ha - p.ny*hw },
-          { x: c.cx - cos*ha - p.nx*hw, y: c.cy - sin*ha - p.ny*hw },
+          { x: back.cx  + bP.nx*hw, y: back.cy  + bP.ny*hw },
+          { x: front.cx + fP.nx*hw, y: front.cy + fP.ny*hw },
+          { x: front.cx - fP.nx*hw, y: front.cy - fP.ny*hw },
+          { x: back.cx  - bP.nx*hw, y: back.cy  - bP.ny*hw },
         ]
       });
     }
@@ -1250,8 +1245,21 @@
       ctx.fillStyle='#f0f4f8'; ctx.fillRect(0,0,CW,CH);
     }
 
-    // Road (same style as drawRoad) — trace through square centers so road matches tiles
-    function traceHosp(){ ctx.beginPath(); hospitalSquares.sqs.forEach((sq,i)=>i===0?ctx.moveTo(sq.cx,sq.cy):ctx.lineTo(sq.cx,sq.cy)); }
+    // Road — trace through back-edge midpoints then final front-edge midpoint
+    // This makes the road follow exactly the tiles' along-axis
+    function traceHosp(){
+      ctx.beginPath();
+      hospitalSquares.sqs.forEach((sq,i)=>{
+        // back-edge midpoint = midpoint of corners[0] and corners[3]
+        const bx=(sq.corners[0].x+sq.corners[3].x)/2, by=(sq.corners[0].y+sq.corners[3].y)/2;
+        i===0 ? ctx.moveTo(bx,by) : ctx.lineTo(bx,by);
+        // for last square also add front-edge midpoint
+        if(i===HOSP_TOTAL){
+          const fx=(sq.corners[1].x+sq.corners[2].x)/2, fy=(sq.corners[1].y+sq.corners[2].y)/2;
+          ctx.lineTo(fx,fy);
+        }
+      });
+    }
     ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
     ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.32)'; traceHosp(); ctx.stroke();
     ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#c8a060';              traceHosp(); ctx.stroke();
