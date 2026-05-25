@@ -745,7 +745,6 @@
     }
   }
   async function showEventOverlay(ev){
-    if(ev.requireItem&&ITEM_IMG[ev.requireItem]) await showItemPreview(ev.requireItem);
     setEventItemThumb(ev.requireItem||null);
     $('event-name-text').textContent=substitutePlayerName(ev.name,myName);
     $('event-effect-text').textContent=effectsText(ev);
@@ -1358,7 +1357,6 @@
   }
 
   async function showObserverEventOverlay(ev){
-    if(ev.requireItem&&ITEM_IMG[ev.requireItem]) await showItemPreview(ev.requireItem);
     const p=players.find(pl=>pl.player_id===ev.pid);
     $('event-observer-label').textContent=p?`${p.player_name} のイベント`:'';
     setEventItemThumb(ev.requireItem||null);
