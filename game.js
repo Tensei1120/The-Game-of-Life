@@ -227,22 +227,27 @@
       };
     }
 
+    // Compute all centers first
+    const centers = [];
+    for (let n = 0; n <= HOSP_TOTAL; n++) centers.push(ptAt(n * spacing));
+
     const sqs = [];
     const ha = spacing / 2 - 3;
     for (let n = 0; n <= HOSP_TOTAL; n++) {
-      const cDist = n * spacing;
-      const center = ptAt(cDist);
-      const back  = ptAt(cDist - ha);
-      const front = ptAt(cDist + ha);
+      // Direction = vector between neighboring centers → matches the road drawn through centers
+      const prev = centers[Math.max(0, n-1)], next = centers[Math.min(HOSP_TOTAL, n+1)];
+      const angle = Math.atan2(next.cy - prev.cy, next.cx - prev.cx);
+      const p = perp(angle);
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const c = centers[n];
       const hw = n===HOSP_TOTAL ? SQ_ACROSS*0.75/2 : SQ_ACROSS/2;
-      const bP = perp(back.angle), fP = perp(front.angle);
       sqs.push({
-        num: n, cx: center.cx, cy: center.cy,
+        num: n, cx: c.cx, cy: c.cy,
         corners: [
-          { x: back.cx  + bP.nx*hw, y: back.cy  + bP.ny*hw },
-          { x: front.cx + fP.nx*hw, y: front.cy + fP.ny*hw },
-          { x: front.cx - fP.nx*hw, y: front.cy - fP.ny*hw },
-          { x: back.cx  - bP.nx*hw, y: back.cy  - bP.ny*hw },
+          { x: c.cx - cos*ha + p.nx*hw, y: c.cy - sin*ha + p.ny*hw },
+          { x: c.cx + cos*ha + p.nx*hw, y: c.cy + sin*ha + p.ny*hw },
+          { x: c.cx + cos*ha - p.nx*hw, y: c.cy + sin*ha - p.ny*hw },
+          { x: c.cx - cos*ha - p.nx*hw, y: c.cy - sin*ha - p.ny*hw },
         ]
       });
     }
