@@ -228,7 +228,7 @@
     }
 
     const sqs = [];
-    const ha = SQ_ALONG / 2;
+    const ha = spacing / 2 - 3;
     for (let n = 0; n <= HOSP_TOTAL; n++) {
       const cDist = n * spacing;
       const center = ptAt(cDist);
