@@ -1245,8 +1245,8 @@
       ctx.fillStyle='#f0f4f8'; ctx.fillRect(0,0,CW,CH);
     }
 
-    // Road (same style as drawRoad)
-    function traceHosp(){ ctx.beginPath(); HOSP_WAYPOINTS.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)); }
+    // Road (same style as drawRoad) — trace through square centers so road matches tiles
+    function traceHosp(){ ctx.beginPath(); hospitalSquares.sqs.forEach((sq,i)=>i===0?ctx.moveTo(sq.cx,sq.cy):ctx.lineTo(sq.cx,sq.cy)); }
     ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
     ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.32)'; traceHosp(); ctx.stroke();
     ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#c8a060';              traceHosp(); ctx.stroke();
