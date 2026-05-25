@@ -96,10 +96,19 @@
     </div>
   </div>
 
+  <!-- アイテムプレビューオーバーレイ（アイテム限定イベント発動時） -->
+  <div id="item-preview-overlay" class="hidden">
+    <img id="item-preview-img" src="" alt="">
+    <p id="item-preview-name"></p>
+    <p id="item-preview-hint">タップで続ける</p>
+  </div>
+
   <!-- イベントオーバーレイ -->
   <div id="event-overlay" class="hidden">
-    <div id="event-item-bg"></div>
     <div class="event-box">
+      <div id="event-item-thumb-wrap" class="hidden">
+        <img id="event-item-thumb" src="" alt="">
+      </div>
       <p id="event-observer-label" class="event-observer-label"></p>
       <p class="event-name" id="event-name-text"></p>
       <p class="event-effect" id="event-effect-text"></p>

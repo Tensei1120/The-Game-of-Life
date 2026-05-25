@@ -25,7 +25,6 @@
     { id:3,  minPos:1, maxPos:10, name:'昼休み鬼ごっこした！！', item:'友達', happiness:2, health:1 },
     { id:4,  minPos:1, maxPos:10, name:'おかわりじゃんけん5連勝中！！', happiness:1 },
     { id:5,  minPos:1, maxPos:10, name:'牛乳パック潰して先生に怒られた…。', happiness:-1 },
-    { id:6,  minPos:1, maxPos:10, name:'「よそはよそ、うちはうち！そんなに（プレイヤー名）の家がいいなら、（プレイヤー名）の家の子になりなさい！」', happiness:-2 },
     { id:7,  minPos:1, maxPos:10, name:'おじいちゃんからお小遣いもらった！！！', money:1, happiness:3 },
     { id:8,  minPos:1, maxPos:10, name:'夏休みおばあちゃん家に行った！！', happiness:3 },
     { id:9,  minPos:1, maxPos:10, name:'ランドセルじゃんけん負けた…。', health:-1 },
@@ -722,18 +721,32 @@
     await doCommitSave(newSt,Array.isArray(playerData.__used_events)?playerData.__used_events:[]);
   }
 
-  function setEventItemBg(requireItem){
-    const bg=$('event-item-bg');
-    if(requireItem&&ITEM_IMG[requireItem]){
-      bg.style.backgroundImage=`url('${ITEM_IMG[requireItem]}')`;
-      $('event-overlay').classList.add('has-item-bg');
+  function showItemPreview(item){
+    return new Promise(resolve=>{
+      const ov=$('item-preview-overlay');
+      const img=$('item-preview-img');
+      $('item-preview-name').textContent=item;
+      img.src=ITEM_IMG[item]||`items/${item}.png`;
+      img.onerror=()=>{ if(!img.src.endsWith('.jpg')) img.src=`items/${item}.jpg`; };
+      ov.classList.remove('hidden');
+      const done=()=>{ ov.classList.add('hidden'); ov.removeEventListener('click',done); clearTimeout(t); resolve(); };
+      ov.addEventListener('click',done);
+      const t=setTimeout(done,1800);
+    });
+  }
+  function setEventItemThumb(item){
+    const wrap=$('event-item-thumb-wrap');
+    if(item&&ITEM_IMG[item]){
+      const img=$('event-item-thumb');
+      img.src=ITEM_IMG[item];
+      wrap.classList.remove('hidden');
     } else {
-      bg.style.backgroundImage='';
-      $('event-overlay').classList.remove('has-item-bg');
+      wrap.classList.add('hidden');
     }
   }
-  function showEventOverlay(ev){
-    setEventItemBg(ev.requireItem||null);
+  async function showEventOverlay(ev){
+    if(ev.requireItem&&ITEM_IMG[ev.requireItem]) await showItemPreview(ev.requireItem);
+    setEventItemThumb(ev.requireItem||null);
     $('event-name-text').textContent=substitutePlayerName(ev.name,myName);
     $('event-effect-text').textContent=effectsText(ev);
     $('event-overlay').classList.remove('hidden');
@@ -798,8 +811,7 @@
 
   $('btn-event-ok').addEventListener('click',async()=>{
     $('event-overlay').classList.add('hidden');
-    $('event-overlay').classList.remove('has-item-bg');
-    $('event-item-bg').style.backgroundImage='';
+    setEventItemThumb(null);
     if($('event-overlay').classList.contains('observer')){
       $('event-overlay').classList.remove('observer');
       requestAnimationFrame(showStatDeltas);
@@ -1345,10 +1357,11 @@
     }
   }
 
-  function showObserverEventOverlay(ev){
+  async function showObserverEventOverlay(ev){
+    if(ev.requireItem&&ITEM_IMG[ev.requireItem]) await showItemPreview(ev.requireItem);
     const p=players.find(pl=>pl.player_id===ev.pid);
     $('event-observer-label').textContent=p?`${p.player_name} のイベント`:'';
-    setEventItemBg(ev.requireItem||null);
+    setEventItemThumb(ev.requireItem||null);
     $('event-name-text').textContent=ev.eventName||'';
     $('event-effect-text').textContent=ev.eventEffect||'';
     $('event-overlay').classList.add('observer');
