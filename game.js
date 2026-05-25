@@ -62,7 +62,7 @@
     '昭和親父':         { desc:'20マス目まで捨てられない\nグローブを守る',                                      undiscardableUntil:20, protects:['グローブ'] },
     'グローブ':         { desc:'毎ターン健康度+1',                                                              perTurn:{health:1} },
     '友達':             { desc:'毎ターン幸福度+3',                                                              perTurn:{happiness:3} },
-    '好きな人':         { desc:'（効果は後日設定）' },
+    '好きな人':         { desc:'恋人イベント開放' },
     'イーロン・マスクメロン': { desc:'毎ターン50万円獲得\n捨てると200万円獲得',                               perTurn:{money:50},                      onDiscard:{money:200} },
     '大選手養成ギプス': { desc:'毎ターン幸福度-1・健康度-3',                                                    perTurn:{happiness:-1,health:-3} },
     '根性':             { desc:'（効果は後日設定）' },
