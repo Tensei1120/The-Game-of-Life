@@ -242,7 +242,7 @@
 
     const sqs = [];
     for (let n=0; n<=HOSP_TOTAL; n++) {
-      const half_h = n===HOSP_TOTAL ? sqAcross*0.7 : sqAcross/2;
+      const half_h = n===HOSP_TOTAL ? SQ_ACROSS*0.75 : SQ_ACROSS/2;
       const L=bounds[n], R=bounds[n+1];
       sqs.push({
         num: n, cx: pts[n].cx, cy: pts[n].cy,
@@ -258,6 +258,10 @@
   }
 
   const hospitalSquares = buildHospitalSquares();
+
+  // Hospital background image
+  let hospBgImg = null;
+  (function(){ const img=new Image(); img.onload=()=>hospBgImg=img; img.src='items/IMG_3704.jpg'; })();
 
   // TEMPORARY: health=0 test button
   (function(){
@@ -1188,137 +1192,103 @@
     drawTokens();
   }
 
+  function tileGradHosp(n, corners){
+    const tx=(corners[0].x+corners[1].x)/2, ty=(corners[0].y+corners[1].y)/2;
+    const bx=(corners[2].x+corners[3].x)/2, by=(corners[2].y+corners[3].y)/2;
+    const g=ctx.createLinearGradient(tx,ty,bx,by);
+    if(n===0)            {g.addColorStop(0,'#e0eaff');g.addColorStop(1,'#8bb8f8');}
+    else if(n===HOSP_TOTAL){g.addColorStop(0,'#c8f0c0');g.addColorStop(1,'#90d080');}
+    else                 {g.addColorStop(0,'#fffdf5');g.addColorStop(1,'#f0e8d4');}
+    return g;
+  }
+  function tileBorderHosp(n){
+    if(n===0) return '#2040b0';
+    if(n===HOSP_TOTAL) return '#2a8a40';
+    return '#b89860';
+  }
+  function drawHospSq(sq){
+    const n=sq.num;
+    const h=SQ_ACROSS;
+    const fs =Math.max(8, Math.round(h*0.28));
+    const fsB=Math.max(9, Math.round(h*0.30));
+    const dy =h*0.20;
+    const isSpecial=n===0||n===HOSP_TOTAL;
+
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,0.15)'; ctx.shadowBlur=5; ctx.shadowOffsetY=2;
+    ctx.fillStyle=tileGradHosp(n,sq.corners);
+    tilePath(sq.corners); ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle=tileBorderHosp(n);
+    ctx.lineWidth=isSpecial?2:1.2;
+    tilePath(sq.corners); ctx.stroke();
+
+    ctx.save(); ctx.globalAlpha=0.28; ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(sq.corners[0].x,sq.corners[0].y);
+    ctx.lineTo(sq.corners[1].x,sq.corners[1].y);
+    ctx.lineTo(lerp(sq.corners[1],sq.corners[2],0.35).x,lerp(sq.corners[1],sq.corners[2],0.35).y);
+    ctx.lineTo(lerp(sq.corners[0],sq.corners[3],0.35).x,lerp(sq.corners[0],sq.corners[3],0.35).y);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    if(n===0){
+      ctx.fillStyle='#1a3a90';
+      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('入院',sq.cx,sq.cy);
+    } else if(n===HOSP_TOTAL){
+      ctx.fillStyle='#1a6030';
+      ctx.font=`bold ${fsB}px Segoe UI`; ctx.fillText('退院',sq.cx,sq.cy);
+    } else {
+      ctx.fillStyle='#7a6040';
+      ctx.font=`${fs}px Segoe UI`; ctx.fillText(n,sq.cx,sq.cy);
+    }
+  }
   function drawHospitalMap(){
-    // White base
-    ctx.fillStyle = '#fafbfc';
-    ctx.fillRect(0, 0, CW, CH);
+    // Background image
+    if(hospBgImg){
+      ctx.drawImage(hospBgImg, 0, 0, CW, CH);
+    } else {
+      ctx.fillStyle='#f0f4f8'; ctx.fillRect(0,0,CW,CH);
+    }
 
-    // Floor tile grid
-    ctx.save();
-    ctx.strokeStyle = '#e0e8f0';
-    ctx.lineWidth = 1;
-    const tileSize = 60;
-    for(let x = 0; x < CW; x += tileSize){
-      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CH); ctx.stroke();
-    }
-    for(let y = 0; y < CH; y += tileSize){
-      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CW,y); ctx.stroke();
-    }
+    // Road (same style as drawRoad)
+    function traceHosp(){ ctx.beginPath(); HOSP_WAYPOINTS.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)); }
+    ctx.save(); ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.lineWidth=ROAD_W+14; ctx.strokeStyle='rgba(100,70,30,0.32)'; traceHosp(); ctx.stroke();
+    ctx.lineWidth=ROAD_W+4;  ctx.strokeStyle='#c8a060';              traceHosp(); ctx.stroke();
+    ctx.lineWidth=ROAD_W;    ctx.strokeStyle='#ddb870';              traceHosp(); ctx.stroke();
+    ctx.lineWidth=ROAD_W-8;  ctx.strokeStyle='rgba(255,240,190,0.4)'; traceHosp(); ctx.stroke();
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.55)';
+    ctx.setLineDash([12,16]); traceHosp(); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
 
-    // Hospital bed illustration in the arch interior (centered around x=560, y=420)
-    (function drawBed(){
-      const bx=560, by=430;
-      ctx.save();
-      // Mattress
-      ctx.fillStyle='#dce8f5';
-      ctx.beginPath(); ctx.roundRect(bx-130,by-50,260,100,14); ctx.fill();
-      ctx.strokeStyle='#a0bcd8'; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.roundRect(bx-130,by-50,260,100,14); ctx.stroke();
-      // Pillow
-      ctx.fillStyle='#ffffff';
-      ctx.beginPath(); ctx.roundRect(bx-118,by-42,70,50,10); ctx.fill();
-      ctx.strokeStyle='#c0d4e8'; ctx.lineWidth=1.5;
-      ctx.beginPath(); ctx.roundRect(bx-118,by-42,70,50,10); ctx.stroke();
-      // Blanket stripe
-      ctx.fillStyle='#b8d4ee';
-      ctx.beginPath(); ctx.roundRect(bx-38,by-42,168,50,10); ctx.fill();
-      // Bed frame
-      ctx.strokeStyle='#88aac8'; ctx.lineWidth=3;
-      ctx.beginPath(); ctx.roundRect(bx-140,by-58,280,116,18); ctx.stroke();
-      // Head board
-      ctx.fillStyle='#e8eff8';
-      ctx.beginPath(); ctx.roundRect(bx-140,by-80,30,100,8); ctx.fill();
-      ctx.strokeStyle='#88aac8'; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.roundRect(bx-140,by-80,30,100,8); ctx.stroke();
-      // Foot board
-      ctx.fillStyle='#e8eff8';
-      ctx.beginPath(); ctx.roundRect(bx+110,by-60,30,90,8); ctx.fill();
-      ctx.strokeStyle='#88aac8'; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.roundRect(bx+110,by-60,30,90,8); ctx.stroke();
-      // Cross (red)
-      ctx.strokeStyle='#e53935'; ctx.lineWidth=4; ctx.lineCap='round';
-      ctx.beginPath(); ctx.moveTo(bx+60,by-85); ctx.lineTo(bx+60,by-30); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(bx+38,by-58); ctx.lineTo(bx+82,by-58); ctx.stroke();
-      ctx.restore();
-    })();
-
-    // Road along HOSP_WAYPOINTS
-    const roadW = hospitalSquares.sqAlong + 8;
-    ctx.save();
-    ctx.lineJoin='round'; ctx.lineCap='round';
-    // Shadow
-    ctx.beginPath();
-    HOSP_WAYPOINTS.forEach(([x,y],i) => i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));
-    ctx.lineWidth=roadW+8; ctx.strokeStyle='rgba(100,140,180,0.18)'; ctx.stroke();
-    // Road fill
-    ctx.beginPath();
-    HOSP_WAYPOINTS.forEach(([x,y],i) => i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));
-    ctx.lineWidth=roadW; ctx.strokeStyle='#c8dff0'; ctx.stroke();
-    // Center line
-    ctx.beginPath();
-    HOSP_WAYPOINTS.forEach(([x,y],i) => i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));
-    ctx.lineWidth=roadW-8; ctx.strokeStyle='#ddeef8'; ctx.stroke();
-    ctx.restore();
-
-    // Draw squares
-    for(let n=0; n<=HOSP_TOTAL; n++){
-      const sq=hospitalSquares.sqs[n];
-      ctx.save();
-      if(n===0){
-        // Admission square: light blue
-        ctx.fillStyle='#bbdefb';
-        tilePath(sq.corners); ctx.fill();
-        ctx.strokeStyle='#1565c0'; ctx.lineWidth=2.5;
-        tilePath(sq.corners); ctx.stroke();
-        ctx.fillStyle='#0d47a1'; ctx.font='bold 13px Segoe UI';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('入院', sq.cx, sq.cy);
-      } else if(n===HOSP_TOTAL){
-        // Discharge square: green
-        ctx.fillStyle='#c8e6c9';
-        tilePath(sq.corners); ctx.fill();
-        ctx.strokeStyle='#2e7d32'; ctx.lineWidth=2.5;
-        tilePath(sq.corners); ctx.stroke();
-        ctx.fillStyle='#1b5e20'; ctx.font='bold 13px Segoe UI';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('退院', sq.cx, sq.cy);
-      } else {
-        ctx.fillStyle='#ffffff';
-        tilePath(sq.corners); ctx.fill();
-        ctx.strokeStyle='#90bcd8'; ctx.lineWidth=1.5;
-        tilePath(sq.corners); ctx.stroke();
-        ctx.fillStyle='#1565c0'; ctx.font='12px Segoe UI';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText(n, sq.cx, sq.cy);
-      }
-      ctx.restore();
-    }
+    // Squares
+    for(let n=0; n<=HOSP_TOTAL; n++) drawHospSq(hospitalSquares.sqs[n]);
 
     // Title
     ctx.save();
-    ctx.fillStyle='rgba(255,255,255,0.85)';
-    ctx.beginPath(); ctx.roundRect(80,52,180,40,10); ctx.fill();
-    ctx.fillStyle='#1565c0'; ctx.font='bold 22px Segoe UI';
+    ctx.fillStyle='rgba(255,255,255,0.88)';
+    ctx.beginPath(); ctx.roundRect(78,50,188,42,10); ctx.fill();
+    ctx.fillStyle='#1a3a90'; ctx.font='bold 22px Segoe UI';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('🏥 入院マップ', 170, 72);
+    ctx.fillText('🏥 入院マップ', 172, 71);
     ctx.restore();
 
-    // Player tokens
-    players.forEach(p => {
+    // Player tokens (same style as drawTokens)
+    players.forEach(p=>{
       const st=getStats(playerData[p.player_id]);
       if(!st.hospitalized) return;
       const sq=hospitalSquares.sqs[st.hospitalPos];
       if(!sq) return;
       const tx=sq.cx, ty=sq.cy, R=16;
-      ctx.save();
-      ctx.shadowColor='rgba(0,0,0,0.4)'; ctx.shadowBlur=8; ctx.shadowOffsetY=3;
-      ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill();
-      ctx.restore();
+      ctx.save(); ctx.shadowColor='rgba(0,0,0,0.4)'; ctx.shadowBlur=8; ctx.shadowOffsetY=3;
+      ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill(); ctx.restore();
       const tg=ctx.createRadialGradient(tx-R*.3,ty-R*.3,R*.05,tx,ty,R);
-      tg.addColorStop(0,'rgba(255,255,255,0.6)'); tg.addColorStop(1,'rgba(0,0,0,0)');
+      tg.addColorStop(0,'rgba(255,255,255,0.62)'); tg.addColorStop(1,'rgba(0,0,0,0)');
       ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.fillStyle=tg; ctx.fill();
-      ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2;
+      ctx.strokeStyle='rgba(255,255,255,0.92)'; ctx.lineWidth=2.5;
       ctx.beginPath(); ctx.arc(tx,ty,R,0,Math.PI*2); ctx.stroke();
       ctx.fillStyle='#fff'; ctx.font='bold 11px Segoe UI';
       ctx.textAlign='center'; ctx.textBaseline='middle';
