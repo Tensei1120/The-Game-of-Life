@@ -215,46 +215,38 @@
     }
     const spacing = total / HOSP_TOTAL;
 
-    const pts = [];
-    for (let n = 0; n <= HOSP_TOTAL; n++) {
-      const target = n * spacing;
+    function ptAt(d) {
+      d = Math.max(0, Math.min(total, d));
       let traveled = 0, seg = 0;
-      while (seg < segLens.length-1 && traveled+segLens[seg] < target) traveled += segLens[seg++];
-      const t = segLens[seg]>0 ? Math.min((target-traveled)/segLens[seg],1) : 0;
+      while (seg < segLens.length-1 && traveled+segLens[seg] < d) traveled += segLens[seg++];
+      const t = segLens[seg]>0 ? (d-traveled)/segLens[seg] : 0;
       const p0 = HOSP_WAYPOINTS[seg], p1 = HOSP_WAYPOINTS[Math.min(seg+1,HOSP_WAYPOINTS.length-1)];
-      pts.push({
-        cx: p0[0]+(p1[0]-p0[0])*t,
-        cy: p0[1]+(p1[1]-p0[1])*t,
+      return {
+        cx: p0[0]+(p1[0]-p0[0])*t, cy: p0[1]+(p1[1]-p0[1])*t,
         angle: Math.atan2(p1[1]-p0[1], p1[0]-p0[0])
-      });
+      };
     }
-
-    const sqAcross = spacing;
-    const bounds = [];
-    { const p=perp(pts[0].angle); bounds.push({x:pts[0].cx,y:pts[0].cy,nx:p.nx,ny:p.ny}); }
-    for (let i=1; i<=HOSP_TOTAL; i++) {
-      const mx=(pts[i-1].cx+pts[i].cx)/2, my=(pts[i-1].cy+pts[i].cy)/2;
-      const angle=Math.atan2(pts[i].cy-pts[i-1].cy, pts[i].cx-pts[i-1].cx);
-      const p=perp(angle);
-      bounds.push({x:mx,y:my,nx:p.nx,ny:p.ny});
-    }
-    { const p=perp(pts[HOSP_TOTAL].angle); bounds.push({x:pts[HOSP_TOTAL].cx,y:pts[HOSP_TOTAL].cy,nx:p.nx,ny:p.ny}); }
 
     const sqs = [];
-    for (let n=0; n<=HOSP_TOTAL; n++) {
-      const half_h = n===HOSP_TOTAL ? SQ_ACROSS*0.75 : SQ_ACROSS/2;
-      const L=bounds[n], R=bounds[n+1];
+    const ha = SQ_ALONG / 2;
+    for (let n = 0; n <= HOSP_TOTAL; n++) {
+      const cDist = n * spacing;
+      const center = ptAt(cDist);
+      const back  = ptAt(cDist - ha);
+      const front = ptAt(cDist + ha);
+      const hw = n===HOSP_TOTAL ? SQ_ACROSS*0.75/2 : SQ_ACROSS/2;
+      const bP = perp(back.angle), fP = perp(front.angle);
       sqs.push({
-        num: n, cx: pts[n].cx, cy: pts[n].cy,
-        corners:[
-          {x:L.x+L.nx*half_h, y:L.y+L.ny*half_h},
-          {x:R.x+R.nx*half_h, y:R.y+R.ny*half_h},
-          {x:R.x-R.nx*half_h, y:R.y-R.ny*half_h},
-          {x:L.x-L.nx*half_h, y:L.y-L.ny*half_h},
+        num: n, cx: center.cx, cy: center.cy,
+        corners: [
+          { x: back.cx  + bP.nx*hw, y: back.cy  + bP.ny*hw },
+          { x: front.cx + fP.nx*hw, y: front.cy + fP.ny*hw },
+          { x: front.cx - fP.nx*hw, y: front.cy - fP.ny*hw },
+          { x: back.cx  - bP.nx*hw, y: back.cy  - bP.ny*hw },
         ]
       });
     }
-    return {sqs, sqAlong: spacing, sqAcross: spacing};
+    return { sqs, sqAlong: spacing, sqAcross: SQ_ACROSS };
   }
 
   const hospitalSquares = buildHospitalSquares();
