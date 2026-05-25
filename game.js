@@ -70,7 +70,7 @@
     '好きな人':         { desc:'恋人イベント開放' },
     'イーロン・マスクメロン': { desc:'毎ターン50万円獲得\n捨てると200万円獲得',                               perTurn:{money:50},                      onDiscard:{money:200} },
     '大選手養成ギプス': { desc:'毎ターン幸福度-1・健康度-3',                                                    perTurn:{happiness:-1,health:-3} },
-    '根性':             { desc:'（効果は後日設定）' },
+    '根性':             { desc:'健康度-5まで入院回避\n入院代が二倍になる' },
   };
 
   function rollStartItems(){
@@ -771,7 +771,8 @@
     drawBoard();
 
     if(newHospPos >= HOSP_TOTAL){
-      const cost = newTurns * 20;
+      const costMult = (newSt.items||[]).includes('根性') ? 2 : 1;
+      const cost = newTurns * 20 * costMult;
       const dischargedSt = {...newSt,
         money: newSt.money - cost,
         hospitalized: false, hospitalPos: 0, hospitalTurns: 0,
@@ -877,7 +878,8 @@
     newSt=applyPerTurnEffects(newSt);
     newSt=clampStats(newSt);
     let wasJustHospitalized = false;
-    if(newSt.health<=0 && !newSt.hospitalized && !newSt.finished){
+    const hospThreshold = (newSt.items||[]).includes('根性') ? -5 : 0;
+    if(newSt.health<=hospThreshold && !newSt.hospitalized && !newSt.finished){
       wasJustHospitalized = true;
       newSt = {...newSt, hospitalized:true, hospitalPos:0, hospitalTurns:0, prevMapPos:newSt.pos};
     }
@@ -1024,6 +1026,7 @@
     '好きな人':               'items/IMG_3700.jpg',
     'イーロン・マスクメロン': 'items/IMG_3682.jpg',
     '大選手養成ギプス':       'items/IMG_3685.jpg',
+    '根性':                   'items/IMG_3702.jpg',
   };
   // エッジから連結した白ピクセルのみ除去（内部の白は保持）
   function removeWhiteBg(srcImg){
