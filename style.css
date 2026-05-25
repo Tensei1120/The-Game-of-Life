@@ -456,12 +456,13 @@ body {
 #event-item-bg {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 360px; height: 360px;
+  width: 620px; height: 620px;
   background-size: contain; background-repeat: no-repeat; background-position: center;
-  pointer-events: none;
+  pointer-events: none; z-index: 0;
   display: none;
 }
 #event-overlay.has-item-bg #event-item-bg { display: block; }
+.event-box { position: relative; z-index: 1; }
 
 /* アイテム捨てオーバーレイ */
 #discard-overlay {
