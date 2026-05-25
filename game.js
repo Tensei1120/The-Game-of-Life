@@ -12,6 +12,12 @@
   const MAX_HAPPINESS = 20;
   const MAX_HEALTH    = 20;
   const FORCED_STOPS  = [20, 30, 50, 70, 90];
+  const HOSP_TOTAL = 12;
+  const HOSP_WAYPOINTS = [
+    [80,  200], [260, 165], [460, 155], [660, 155], [860, 165], [1040, 200],
+    [1080, 390], [1080, 620],
+    [1040, 760], [860, 790], [660, 790], [460, 760], [260, 780], [80, 710]
+  ];
   const BRANCH_START  = 20, BRANCH_END = 30;
   const PLAYER_COLORS = [
     '#1565c0','#c62828','#2e7d32','#e65100',
@@ -88,6 +94,8 @@
     [958,58],[795,44],[630,56],[470,44],[310,56],[158,46],[76,80],
   ];
 
+  let showHospitalMap = false;
+
   let myId = sessionStorage.getItem('gol_pid');
   if (!myId) { myId = crypto.randomUUID(); sessionStorage.setItem('gol_pid', myId); }
 
@@ -101,7 +109,8 @@
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
-             items:Array(6).fill(null), job:null, route:null, finished:false };
+             items:Array(6).fill(null), job:null, route:null, finished:false,
+             hospitalized:false, hospitalPos:0, hospitalTurns:0, prevMapPos:0 };
   }
   function clampStats(st) {
     return { ...st,
@@ -198,6 +207,67 @@
     }
     return sqs;
   }
+
+  function buildHospitalSquares() {
+    const segLens = []; let total = 0;
+    for (let i = 1; i < HOSP_WAYPOINTS.length; i++) {
+      const dx = HOSP_WAYPOINTS[i][0]-HOSP_WAYPOINTS[i-1][0], dy = HOSP_WAYPOINTS[i][1]-HOSP_WAYPOINTS[i-1][1];
+      segLens.push(Math.sqrt(dx*dx+dy*dy)); total += segLens[segLens.length-1];
+    }
+    const spacing = total / HOSP_TOTAL;
+
+    const pts = [];
+    for (let n = 0; n <= HOSP_TOTAL; n++) {
+      const target = n * spacing;
+      let traveled = 0, seg = 0;
+      while (seg < segLens.length-1 && traveled+segLens[seg] < target) traveled += segLens[seg++];
+      const t = segLens[seg]>0 ? Math.min((target-traveled)/segLens[seg],1) : 0;
+      const p0 = HOSP_WAYPOINTS[seg], p1 = HOSP_WAYPOINTS[Math.min(seg+1,HOSP_WAYPOINTS.length-1)];
+      pts.push({
+        cx: p0[0]+(p1[0]-p0[0])*t,
+        cy: p0[1]+(p1[1]-p0[1])*t,
+        angle: Math.atan2(p1[1]-p0[1], p1[0]-p0[0])
+      });
+    }
+
+    const sqAcross = spacing;
+    const bounds = [];
+    { const p=perp(pts[0].angle); bounds.push({x:pts[0].cx,y:pts[0].cy,nx:p.nx,ny:p.ny}); }
+    for (let i=1; i<=HOSP_TOTAL; i++) {
+      const mx=(pts[i-1].cx+pts[i].cx)/2, my=(pts[i-1].cy+pts[i].cy)/2;
+      const angle=Math.atan2(pts[i].cy-pts[i-1].cy, pts[i].cx-pts[i-1].cx);
+      const p=perp(angle);
+      bounds.push({x:mx,y:my,nx:p.nx,ny:p.ny});
+    }
+    { const p=perp(pts[HOSP_TOTAL].angle); bounds.push({x:pts[HOSP_TOTAL].cx,y:pts[HOSP_TOTAL].cy,nx:p.nx,ny:p.ny}); }
+
+    const sqs = [];
+    for (let n=0; n<=HOSP_TOTAL; n++) {
+      const half_h = n===HOSP_TOTAL ? sqAcross*0.7 : sqAcross/2;
+      const L=bounds[n], R=bounds[n+1];
+      sqs.push({
+        num: n, cx: pts[n].cx, cy: pts[n].cy,
+        corners:[
+          {x:L.x+L.nx*half_h, y:L.y+L.ny*half_h},
+          {x:R.x+R.nx*half_h, y:R.y+R.ny*half_h},
+          {x:R.x-R.nx*half_h, y:R.y-R.ny*half_h},
+          {x:L.x-L.nx*half_h, y:L.y-L.ny*half_h},
+        ]
+      });
+    }
+    return {sqs, sqAlong: spacing, sqAcross: spacing};
+  }
+
+  const hospitalSquares = buildHospitalSquares();
+
+  // TEMPORARY: hospital map test button
+  (function(){
+    const testBtn = document.createElement('button');
+    testBtn.textContent = '⛩ 入院テスト';
+    testBtn.style.cssText = 'position:fixed;bottom:80px;right:16px;z-index:999;padding:8px 14px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer;';
+    testBtn.onclick = () => { showHospitalMap = !showHospitalMap; drawBoard(); };
+    document.body.appendChild(testBtn);
+  })();
 
   const branchSquares = (function() {
     const sq20=squares[BRANCH_START], sq30=squares[BRANCH_END];
@@ -507,6 +577,8 @@
     if(!players.length)return;
     const idx=currentPlayerIndex%players.length, cp=players[idx];
     isMyTurn=cp?.player_id===myId;
+    const activeSt = getStats(playerData[players[idx]?.player_id]);
+    showHospitalMap = !!activeSt?.hospitalized;
     const ind=$('turn-indicator');
     if(isMyTurn){ind.textContent='あなたのターンです！';ind.style.color='#228844';}
     else{ind.textContent=(cp?.player_name||'?')+' のターン';ind.style.color=cp?.color||'#1565c0';}
@@ -516,6 +588,7 @@
     $('turn-number').textContent=turnNumber;
     renderPlayerStatusCards(idx);
     requestAnimationFrame(processSlotImages);
+    drawBoard();
   }
 
   function processSlotImages(){
@@ -570,8 +643,13 @@
     if(!isMyTurn||rolling)return;
     rolling=true; $('btn-roll').disabled=true;
     const roll=Math.floor(Math.random()*6)+1;
-    await animateDice(roll);
     const st=getStats(playerData[myId]);
+    if(st.hospitalized){
+      await saveHospitalRoll(st, roll);
+      rolling=false; $('btn-roll').disabled=false;
+      return;
+    }
+    await animateDice(roll);
     const newPos=calcLanding(st.pos,roll);
     if(newPos===BRANCH_START&&!st.route){
       const forced=getForcedRoute(st);
@@ -678,6 +756,53 @@
     return next;
   }
 
+  async function saveHospitalRoll(st, roll){
+    const newHospPos = Math.min(st.hospitalPos + roll, HOSP_TOTAL);
+    lastActionInfo = {pid:myId, route:null, roll, eventName:null, eventEffect:null, eventRequireItem:null};
+
+    await animateDice(roll, myName);
+    await animateHospitalMove(st, newHospPos);
+    await sleep(300);
+
+    const newTurns = (st.hospitalTurns||0)+1;
+    let newSt = {...st, hospitalPos: newHospPos, hospitalTurns: newTurns};
+    playerData = {...playerData, [myId]: newSt};
+    drawBoard();
+
+    if(newHospPos >= HOSP_TOTAL){
+      const cost = newTurns * 20;
+      const dischargedSt = {...newSt,
+        money: newSt.money - cost,
+        hospitalized: false, hospitalPos: 0, hospitalTurns: 0,
+        pos: newSt.prevMapPos,
+      };
+      pendingCommit = {newSt: dischargedSt, newUsedIds: Array.isArray(playerData.__used_events)?playerData.__used_events:[], ev: null, _isDischarge: true, _dischargeCost: cost};
+      await sleep(350);
+      showDischargeEvent(cost);
+      return;
+    }
+
+    await doCommitSave(newSt, Array.isArray(playerData.__used_events)?playerData.__used_events:[]);
+  }
+
+  function showDischargeEvent(cost){
+    setEventItemThumb(null);
+    $('event-name-text').textContent = 'ついに退院の日が来た！';
+    $('event-effect-text').textContent = `${cost}万円払う`;
+    $('event-overlay').classList.remove('hidden');
+  }
+
+  function showHospitalizationNotification(){
+    return new Promise(resolve=>{
+      setEventItemThumb(null);
+      $('event-name-text').textContent = '身体が限界を迎えた。';
+      $('event-effect-text').textContent = '入院マップへ強制移動';
+      $('event-overlay').dataset.hospNotif = '1';
+      $('event-overlay').classList.remove('hidden');
+      window._hospNotifResolve = resolve;
+    });
+  }
+
   async function animateMove(fromSt, toPos, toRoute) {
     for (let pos = fromSt.pos + 1; pos <= toPos; pos++) {
       const midRoute = (pos > BRANCH_START && pos < BRANCH_END)
@@ -763,6 +888,11 @@
     newSt=applyItemTransformations(newSt);
     newSt=applyPerTurnEffects(newSt);
     newSt=clampStats(newSt);
+    let wasJustHospitalized = false;
+    if(newSt.health<=0 && !newSt.hospitalized && !newSt.finished){
+      wasJustHospitalized = true;
+      newSt = {...newSt, hospitalized:true, hospitalPos:0, hospitalTurns:0, prevMapPos:newSt.pos};
+    }
     const newData={...playerData,[myId]:newSt};
     newData.__used_events=newUsedIds;
     if(lastActionInfo){newData.__last_action={...lastActionInfo};lastActionInfo=null;}
@@ -793,6 +923,7 @@
     drawBoard();
     updateTurnUI();
     requestAnimationFrame(showStatDeltas);
+    if(wasJustHospitalized) await showHospitalizationNotification();
   }
 
   $('btn-route-job').addEventListener('click',async()=>{
@@ -811,9 +942,21 @@
   $('btn-event-ok').addEventListener('click',async()=>{
     $('event-overlay').classList.add('hidden');
     setEventItemThumb(null);
+    // Hospitalization notification (post-commit, just dismiss)
+    if($('event-overlay').dataset.hospNotif==='1'){
+      delete $('event-overlay').dataset.hospNotif;
+      if(window._hospNotifResolve){ window._hospNotifResolve(); window._hospNotifResolve=null; }
+      return;
+    }
     if($('event-overlay').classList.contains('observer')){
       $('event-overlay').classList.remove('observer');
       requestAnimationFrame(showStatDeltas);
+      return;
+    }
+    // Discharge event
+    if(pendingCommit?._isDischarge){
+      const {newSt,newUsedIds} = pendingCommit;
+      await doCommitSave(newSt, newUsedIds);
       return;
     }
     const {newSt,newUsedIds,ev}=pendingCommit;
@@ -1039,6 +1182,7 @@
 
   // ── ボード描画 ──
   function drawBoard(){
+    if(showHospitalMap){ drawHospitalMap(); return; }
     drawSky(); drawMountains();
     drawUniBranchRoad();
     drawRoad();
@@ -1050,6 +1194,91 @@
     branchSquares.uni.forEach(sq=>drawBranchSquare(sq));
     drawBranchLabels();
     drawTokens();
+  }
+
+  function drawHospitalMap(){
+    ctx.fillStyle = '#e8f4fc';
+    ctx.fillRect(0, 0, CW, CH);
+
+    // Draw road
+    const roadW = hospitalSquares.sqAlong + 10;
+    ctx.save();
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    HOSP_WAYPOINTS.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    ctx.lineWidth = roadW; ctx.strokeStyle = '#b8d8f0'; ctx.stroke();
+    ctx.beginPath();
+    HOSP_WAYPOINTS.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+    ctx.lineWidth = roadW - 10; ctx.strokeStyle = '#d8eefa'; ctx.stroke();
+    ctx.restore();
+
+    // Draw squares
+    for (let n = 0; n <= HOSP_TOTAL; n++) {
+      const sq = hospitalSquares.sqs[n];
+      ctx.save();
+      if (n === 0) {
+        ctx.fillStyle = '#ffffff';
+        tilePath(sq.corners); ctx.fill();
+        ctx.strokeStyle = '#5aa8d8'; ctx.lineWidth = 2;
+        tilePath(sq.corners); ctx.stroke();
+        ctx.fillStyle = '#1565c0'; ctx.font = 'bold 14px Segoe UI';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('入院', sq.cx, sq.cy);
+      } else if (n === HOSP_TOTAL) {
+        ctx.fillStyle = '#4caf50';
+        tilePath(sq.corners); ctx.fill();
+        ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 2;
+        tilePath(sq.corners); ctx.stroke();
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 14px Segoe UI';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('退院', sq.cx, sq.cy);
+      } else {
+        ctx.fillStyle = '#ffffff';
+        tilePath(sq.corners); ctx.fill();
+        ctx.strokeStyle = '#5aa8d8'; ctx.lineWidth = 1.5;
+        tilePath(sq.corners); ctx.stroke();
+        ctx.fillStyle = '#1565c0'; ctx.font = '13px Segoe UI';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(n, sq.cx, sq.cy);
+      }
+      ctx.restore();
+    }
+
+    // Title
+    ctx.save();
+    ctx.fillStyle = '#1565c0'; ctx.font = 'bold 22px Segoe UI';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('入院マップ', 100, 100);
+    ctx.restore();
+
+    // Draw hospitalized player tokens
+    players.forEach(p => {
+      const st = getStats(playerData[p.player_id]);
+      if (!st.hospitalized) return;
+      const sq = hospitalSquares.sqs[st.hospitalPos];
+      if (!sq) return;
+      const tx = sq.cx, ty = sq.cy, R = 16;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3;
+      ctx.beginPath(); ctx.arc(tx, ty, R, 0, Math.PI*2); ctx.fillStyle = p.color; ctx.fill();
+      ctx.restore();
+      const tg = ctx.createRadialGradient(tx-R*.3, ty-R*.3, R*.05, tx, ty, R);
+      tg.addColorStop(0, 'rgba(255,255,255,0.6)'); tg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath(); ctx.arc(tx, ty, R, 0, Math.PI*2); ctx.fillStyle = tg; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(tx, ty, R, 0, Math.PI*2); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Segoe UI';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(p.player_name[0].toUpperCase(), tx, ty);
+    });
+  }
+
+  async function animateHospitalMove(fromSt, toPos){
+    for(let pos = fromSt.hospitalPos+1; pos <= toPos; pos++){
+      playerData = {...playerData, [myId]: {...playerData[myId], hospitalPos: pos}};
+      drawBoard();
+      await sleep(120);
+    }
   }
 
   function drawUniBranchRoad(){
