@@ -890,6 +890,7 @@
     '水泳教室':               'items/水泳教室.jpg',
     '貧困家庭':               'items/貧困家庭.jpg',
     'グローブ':               'items/グローブ.jpg',
+    '好きな人':               'items/IMG_3700.jpg',
     'イーロン・マスクメロン': 'items/IMG_3682.jpg',
     '大選手養成ギプス':       'items/IMG_3685.jpg',
   };
