@@ -237,7 +237,7 @@
       const hw = n===HOSP_TOTAL ? SQ_ACROSS*0.75/2 : SQ_ACROSS/2;
       const bP = perp(back.angle), fP = perp(front.angle);
       sqs.push({
-        num: n, cx: center.cx, cy: center.cy,
+        num: n, cx: (back.cx+front.cx)/2, cy: (back.cy+front.cy)/2,
         corners: [
           { x: back.cx  + bP.nx*hw, y: back.cy  + bP.ny*hw },
           { x: front.cx + fP.nx*hw, y: front.cy + fP.ny*hw },
