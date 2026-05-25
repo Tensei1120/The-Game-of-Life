@@ -575,27 +575,30 @@ body {
 /* スタートアイテムオーバーレイ */
 #start-items-overlay {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-  background: rgba(0,10,40,.72); z-index: 690; padding: 20px;
+  background: rgba(0,10,40,.72); z-index: 690; padding: 16px;
 }
 #start-items-box {
-  background: #fff; border-radius: 20px; padding: 28px 24px 22px;
+  background: #fff; border-radius: 20px; padding: 22px 16px 18px;
   box-shadow: 0 16px 52px rgba(0,0,0,.45);
-  display: flex; flex-direction: column; align-items: center; gap: 20px;
-  max-width: 90vw; animation: cardPop .3s cubic-bezier(.17,.67,.35,1.35);
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  max-width: 92vw; max-height: 88vh; overflow-y: auto;
+  animation: cardPop .3s cubic-bezier(.17,.67,.35,1.35);
 }
 .start-items-title {
   font-size: 1.3rem; font-weight: 900; color: #1a3a5c; letter-spacing: .04em;
+  flex-shrink: 0;
 }
 #start-items-container {
-  display: flex; flex-wrap: wrap; gap: 16px; justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px; width: 100%;
 }
 .start-item-card {
-  width: min(200px, 42vw); background: #f8fbff;
-  border-radius: 14px; overflow: hidden;
+  background: #f8fbff; border-radius: 14px; overflow: hidden;
   box-shadow: 0 4px 16px rgba(0,0,0,.15);
 }
 .start-item-img-wrap {
-  width: 100%; height: 130px;
+  width: 100%; height: 110px;
   display: flex; align-items: center; justify-content: center;
   position: relative; overflow: hidden;
 }
@@ -603,16 +606,16 @@ body {
   position: absolute; inset: 0;
   width: 100%; height: 100%; object-fit: cover;
 }
-.start-item-body { padding: 10px 12px 14px; }
+.start-item-body { padding: 8px 10px 12px; }
 .start-item-name {
-  font-size: .95rem; font-weight: 800; color: #1a3a5c; margin-bottom: 6px;
+  font-size: .9rem; font-weight: 800; color: #1a3a5c; margin-bottom: 4px;
 }
 .start-item-desc {
-  font-size: .72rem; color: #5a7a9a; line-height: 1.65; white-space: pre-wrap;
+  font-size: .68rem; color: #5a7a9a; line-height: 1.6; white-space: pre-wrap;
 }
 #btn-start-items-ok {
   padding: 11px 56px; font-size: 1rem; font-weight: 700;
-  border: none; border-radius: 50px;
+  border: none; border-radius: 50px; flex-shrink: 0;
   background: linear-gradient(135deg,#44bb66,#228844); color: #fff;
   cursor: pointer; box-shadow: 0 4px 14px rgba(30,140,60,.3); transition: transform .15s;
 }
