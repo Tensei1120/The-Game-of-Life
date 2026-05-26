@@ -1567,6 +1567,7 @@
   }
 
   async function runObserverAnimation(pid,roll,fromSt,toPos,toRoute,eventName=null,eventEffect=null,eventRequireItem=null){
+    showHospitalMap = false;
     observerAnimating=true;
     const btn=$('btn-roll');
     const wasDisabled=btn.disabled;
