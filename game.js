@@ -1571,6 +1571,7 @@
   function onObserverHospitalBroadcast(payload){
     if(payload.pid===myId) return;
     const p=players.find(pl=>pl.player_id===payload.pid);
+    broadcastHandledPid=payload.pid;
     showHospitalMap=true;
     observerHospitalAnimPos[payload.pid] = payload.fromHospPos;
     drawBoard();
@@ -1582,6 +1583,7 @@
           await sleep(120);
         }
         delete observerHospitalAnimPos[payload.pid];
+        updateTurnUI();
       })();
     });
   }
