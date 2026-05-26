@@ -469,8 +469,9 @@
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},p=>onRoomChange(p.new))
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'rooms',filter:`id=eq.${roomId}`},()=>{if(!isHost)showDissolutionOverlay();})
       .on('postgres_changes',{event:'*',schema:'public',table:'room_players',filter:`room_id=eq.${roomId}`},()=>refreshPlayers())
-      .on('broadcast',{event:'turn_action'},({payload})=>onObserverBroadcast(payload))
-      .on('broadcast',{event:'turn_event'}, ({payload})=>onObserverEventBroadcast(payload))
+      .on('broadcast',{event:'turn_action'},   ({payload})=>onObserverBroadcast(payload))
+      .on('broadcast',{event:'turn_event'},    ({payload})=>onObserverEventBroadcast(payload))
+      .on('broadcast',{event:'hospital_action'},({payload})=>onObserverHospitalBroadcast(payload))
       .subscribe();
   }
 
@@ -760,6 +761,9 @@
   async function saveHospitalRoll(st, roll){
     const newHospPos = Math.min(st.hospitalPos + roll, HOSP_TOTAL);
     lastActionInfo = {pid:myId, route:null, roll, eventName:null, eventEffect:null, eventRequireItem:null};
+    channel.send({type:'broadcast',event:'hospital_action',payload:{
+      pid:myId, roll, fromHospPos:st.hospitalPos, toHospPos:newHospPos
+    }}).catch(()=>{});
 
     await animateDice(roll, myName);
     await animateHospitalMove(st, newHospPos);
@@ -1490,6 +1494,7 @@
     const byKey={};
     players.forEach(p=>{
       const st=getStats(playerData[p.player_id]);
+      if(st.hospitalized) return;
       const bsq=getBranchSq(st.pos,st.route);
       const sq=bsq||squares[st.pos];
       if(!sq)return;
@@ -1561,6 +1566,21 @@
     },30);
   }
 
+  function onObserverHospitalBroadcast(payload){
+    if(payload.pid===myId) return;
+    const p=players.find(pl=>pl.player_id===payload.pid);
+    showHospitalMap=true;
+    drawBoard();
+    animateDice(payload.roll, p?.player_name||'').then(()=>{
+      (async()=>{
+        for(let pos=payload.fromHospPos+1; pos<=payload.toHospPos; pos++){
+          playerData={...playerData,[payload.pid]:{...playerData[payload.pid],hospitalPos:pos}};
+          drawBoard();
+          await sleep(120);
+        }
+      })();
+    });
+  }
   function onObserverEventBroadcast(payload){
     if(payload.pid===myId) return;
     pendingObserverEvent={pid:payload.pid,eventName:payload.eventName,eventEffect:payload.eventEffect,requireItem:payload.requireItem||null};
