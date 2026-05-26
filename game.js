@@ -105,6 +105,7 @@
   let itemAcquisitionQueue = [], itemAcquisitionActive = false, gameStartShown = false;
   let lastActionInfo = null, observerAnimCancel = false, observerAnimating = false;
   let broadcastHandledPid = null, pendingObserverEvent = null, observerRealtimeData = null;
+  let observerHospitalAnimPos = {};
 
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
@@ -1292,7 +1293,8 @@
     players.forEach(p=>{
       const st=getStats(playerData[p.player_id]);
       if(!st.hospitalized) return;
-      const sq=hospitalSquares.sqs[st.hospitalPos];
+      const animPos = observerHospitalAnimPos[p.player_id];
+      const sq=hospitalSquares.sqs[animPos !== undefined ? animPos : st.hospitalPos];
       if(!sq) return;
       const tx=sq.cx, ty=sq.cy, R=16;
       ctx.save(); ctx.shadowColor='rgba(0,0,0,0.4)'; ctx.shadowBlur=8; ctx.shadowOffsetY=3;
@@ -1570,14 +1572,16 @@
     if(payload.pid===myId) return;
     const p=players.find(pl=>pl.player_id===payload.pid);
     showHospitalMap=true;
+    observerHospitalAnimPos[payload.pid] = payload.fromHospPos;
     drawBoard();
     animateDice(payload.roll, p?.player_name||'').then(()=>{
       (async()=>{
         for(let pos=payload.fromHospPos+1; pos<=payload.toHospPos; pos++){
-          playerData={...playerData,[payload.pid]:{...playerData[payload.pid],hospitalPos:pos}};
+          observerHospitalAnimPos[payload.pid] = pos;
           drawBoard();
           await sleep(120);
         }
+        delete observerHospitalAnimPos[payload.pid];
       })();
     });
   }
