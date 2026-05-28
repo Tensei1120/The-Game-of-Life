@@ -54,6 +54,38 @@
     // ── 昭和親父 限定 ──
     { id:25, minPos:1, maxPos:10, requireItem:'昭和親父', name:'地獄のトレーニングを受ける。', item:'大選手養成ギプス' },
     { id:26, minPos:1, maxPos:10, requireItem:'昭和親父', name:'「地区大会で優勝したくらいで調子に乗るな！あんなろくでもない集団に１点でも取られたことを恥と思え馬鹿者！」', happiness:-3 },
+
+    // ═══════════ 11〜20マス ═══════════
+    // ── 全員共通 ──
+    { id:27, minPos:11, maxPos:19, name:'男子校の下駄箱の匂いは、常軌を逸している。', item:'男子校の呪い', health:-3 },
+    { id:28, minPos:11, maxPos:19, name:'ここ2か月、部活のオフがない。', happiness:-5, health:-5, item:'根性' },
+    { id:29, minPos:11, maxPos:19, name:'徹夜で課題を終わらせた。', happiness:1, health:-4 },
+    { id:30, minPos:11, maxPos:19, name:'雨の日の女子校は靴下が干してある。', item:'女子校ブランド' },
+    { id:31, minPos:11, maxPos:19, name:'この時母さんに言った一言を未だに後悔している。', happiness:-3 },
+    { id:32, minPos:11, maxPos:19, name:'ツッパることが男のたった一つの勲章だって、この胸に信じて生きてきた。', item:'悪い友達' },
+    { id:34, minPos:11, maxPos:19, name:'模試でE判定…', happiness:-6 },
+    { id:35, minPos:11, maxPos:19, name:'模試でA判定！', happiness:3 },
+    { id:37, minPos:11, maxPos:19, name:'「この世界は腐ってる。ならこんな世界、俺がぶっ壊してやる！…裏社会のやつらは俺をこう呼ぶ…"堕天使"と。世界を牛耳る悪の組…', item:'黒歴史ノート' },
+    { id:38, minPos:11, maxPos:19, name:'後ろの席のやつと仲良くなった！', item:'友達' },
+    { id:39, minPos:11, maxPos:19, name:'「おい貧乏人２号、100万やるから俺の舎弟になれ」', money:100, item:'金持ち友達' },
+    // ── 条件あり（持っていないとき） ──
+    { id:33, minPos:11, maxPos:19, requireNotItem:'好きな人', name:'文化祭で一目惚れした。', item:'好きな人' },
+    { id:36, minPos:11, maxPos:19, requireNotItem:'塾のテキスト', name:'あたし、やっぱり慶應にいきたい。', item:'塾のテキスト' },
+    // ── 好きな人 限定 ──
+    { id:40, minPos:11, maxPos:19, requireItem:'好きな人', name:'好きな人と付き合った！', happiness:10, upgradeItem:{from:'好きな人',to:'恋人'} },
+    // ── 昭和親父 限定 ──
+    { id:41, minPos:11, maxPos:19, requireItems:['昭和親父','大選手養成ギプス'], name:'度を越えたトレーニングをさせられた。', upgradeItem:{from:'大選手養成ギプス',to:'ジーザス・ギプス'} },
+    { id:42, minPos:11, maxPos:19, requireItem:'昭和親父', name:'「甲子園に出たくらいで調子に乗るな馬鹿者！優勝せんかったらお前は一年間飯抜きだ！」', happiness:-5 },
+    // ── 教育ママ 限定 ──
+    { id:43, minPos:11, maxPos:19, requireItem:'教育ママ', name:'中学受験してなかったら、今頃皆と笑いあえていたのかな。', happiness:-3 },
+    { id:44, minPos:11, maxPos:19, requireItem:'教育ママ', name:'朝4時に母の呼び覚ます声を聞き、机に向かう毎日。', happiness:-2, health:-4 },
+    // ── 貧困家庭 限定 ──
+    { id:45, minPos:11, maxPos:19, requireItem:'貧困家庭', name:'週８でバイトしている。', money:8, health:-4 },
+    // ── 親のスネ 限定 ──
+    { id:46, minPos:11, maxPos:19, requireItem:'親のスネ', name:'お小遣いが増えた！', itemBonusDelta:{'親のスネ':{money:1}}, happiness:1 },
+    { id:47, minPos:11, maxPos:19, requireItem:'親のスネ', name:'「家族旅行もこれで最後かしらね…」と言う母の瞳に寂しさが映る。', happiness:2 },
+    { id:48, minPos:11, maxPos:19, requireItem:'親のスネ', name:'バイトした！！', money:2 },
+    { id:49, minPos:11, maxPos:19, requireItems:['親のスネ','友達'], name:'ディ〇ニーリゾートに宿泊した！', money:-10, happiness:3 },
   ];
 
   const ITEMS = {
@@ -71,6 +103,13 @@
     'イーロン・マスクメロン': { desc:'毎ターン50万円獲得\n捨てると200万円獲得',                               perTurn:{money:50},                      onDiscard:{money:200} },
     '大選手養成ギプス': { desc:'毎ターン幸福度-1・健康度-3',                                                    perTurn:{happiness:-1,health:-3} },
     '根性':             { desc:'健康度-5まで入院回避\n入院代が二倍になる' },
+    '男子校の呪い':     { desc:'（効果未定）' },
+    '女子校ブランド':   { desc:'（効果未定）' },
+    '悪い友達':         { desc:'（効果未定）' },
+    '黒歴史ノート':     { desc:'（効果未定）' },
+    '恋人':             { desc:'（効果未定）' },
+    '金持ち友達':       { desc:'（効果未定）' },
+    'ジーザス・ギプス': { desc:'（効果未定）' },
   };
 
   function rollStartItems(){
@@ -110,7 +149,8 @@
   function defaultStats(pos=0) {
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
              items:Array(6).fill(null), job:null, route:null, finished:false,
-             hospitalized:false, hospitalPos:0, hospitalTurns:0, prevMapPos:0 };
+             hospitalized:false, hospitalPos:0, hospitalTurns:0, prevMapPos:0,
+             itemBonuses:{} };
   }
   function clampStats(st) {
     return { ...st,
@@ -701,10 +741,18 @@
     let money=st.money,happiness=st.happiness,health=st.health;
     for(let i=0;i<st.items.length;i++){
       const item=st.items[i]; if(!item) continue;
-      const pt=ITEMS[item]?.perTurn; if(!pt) continue;
-      if(pt.money)     money     +=pt.money;
-      if(pt.happiness) happiness +=pt.happiness;
-      if(pt.health)    health    +=pt.health;
+      const pt=ITEMS[item]?.perTurn;
+      if(pt){
+        if(pt.money)     money     +=pt.money;
+        if(pt.happiness) happiness +=pt.happiness;
+        if(pt.health)    health    +=pt.health;
+      }
+      const bonus=st.itemBonuses?.[item];
+      if(bonus){
+        if(bonus.money)     money     +=bonus.money;
+        if(bonus.happiness) happiness +=bonus.happiness;
+        if(bonus.health)    health    +=bonus.health;
+      }
     }
     return{...st,money,happiness,health};
   }
@@ -713,14 +761,19 @@
     return pos>0&&pos<100&&!FORCED_STOPS.includes(pos);
   }
   function pickEvent(pos,usedIds,items=[]){
-    const av=EVENTS.filter(e=>pos>=e.minPos&&pos<=e.maxPos&&!usedIds.includes(e.id));
-    const conditional=av.filter(e=>e.requireItem&&items.includes(e.requireItem));
-    const general=av.filter(e=>!e.requireItem);
+    const av=EVENTS.filter(e=>{
+      if(pos<e.minPos||pos>e.maxPos||usedIds.includes(e.id)) return false;
+      if(e.requireItem&&!items.includes(e.requireItem)) return false;
+      if(e.requireItems&&!e.requireItems.every(i=>items.includes(i))) return false;
+      if(e.requireNotItem&&items.includes(e.requireNotItem)) return false;
+      return true;
+    });
+    const conditional=av.filter(e=>e.requireItem||e.requireItems);
+    const general=av.filter(e=>!e.requireItem&&!e.requireItems);
     if(!conditional.length) return general.length?general[Math.floor(Math.random()*general.length)]:null;
     // アイテム限定 50%、全員共通 50%
     const pool=Math.random()<0.5?conditional:general;
     if(pool.length) return pool[Math.floor(Math.random()*pool.length)];
-    // 片方が空の場合はもう一方から選ぶ
     const fallback=pool===conditional?general:conditional;
     return fallback.length?fallback[Math.floor(Math.random()*fallback.length)]:null;
   }
@@ -729,12 +782,20 @@
   }
   function effectsText(ev){
     const p=[];
-    if(ev.item)       p.push(`アイテム「${ev.item}」を獲得！`);
-    if(ev.removeItem) p.push(`アイテム「${ev.removeItem}」を失った…`);
-    if(ev.setJob)     p.push(`職業「${ev.setJob}」になる！`);
-    if(ev.money)      p.push(ev.money>0?`${ev.money}万円 獲得！`:`${Math.abs(ev.money)}万円 失った...`);
-    if(ev.happiness)  p.push(`幸福度 ${ev.happiness>0?'+':''}${ev.happiness}`);
-    if(ev.health)     p.push(`健康度 ${ev.health>0?'+':''}${ev.health}`);
+    if(ev.upgradeItem) p.push(`「${ev.upgradeItem.from}」が「${ev.upgradeItem.to}」に進化！`);
+    if(ev.item)        p.push(`アイテム「${ev.item}」を獲得！`);
+    if(ev.removeItem)  p.push(`アイテム「${ev.removeItem}」を失った…`);
+    if(ev.setJob)      p.push(`職業「${ev.setJob}」になる！`);
+    if(ev.money)       p.push(ev.money>0?`${ev.money}万円 獲得！`:`${Math.abs(ev.money)}万円 失った...`);
+    if(ev.happiness)   p.push(`幸福度 ${ev.happiness>0?'+':''}${ev.happiness}`);
+    if(ev.health)      p.push(`健康度 ${ev.health>0?'+':''}${ev.health}`);
+    if(ev.itemBonusDelta){
+      for(const [itm,d] of Object.entries(ev.itemBonusDelta)){
+        if(d.money)     p.push(`「${itm}」毎ターン+${d.money}万円 永続増加！`);
+        if(d.happiness) p.push(`「${itm}」毎ターン幸福度${d.happiness>0?'+':''}${d.happiness} 永続増加！`);
+        if(d.health)    p.push(`「${itm}」毎ターン健康度${d.health>0?'+':''}${d.health} 永続増加！`);
+      }
+    }
     return p.join('\n');
   }
   function applyEventToStats(st,ev){
@@ -747,6 +808,23 @@
       const items=[...st.items];
       const idx=items.indexOf(ev.removeItem);
       if(idx>=0){ items[idx]=null; next.items=items; }
+    }
+    if(ev.upgradeItem){
+      const items=[...(next.items||st.items)];
+      const idx=items.indexOf(ev.upgradeItem.from);
+      if(idx>=0){ items[idx]=ev.upgradeItem.to; next.items=items; }
+    }
+    if(ev.itemBonusDelta){
+      const bonuses={...(st.itemBonuses||{})};
+      for(const [itm,d] of Object.entries(ev.itemBonusDelta)){
+        const cur=bonuses[itm]||{};
+        bonuses[itm]={
+          money:    (cur.money    ||0)+(d.money    ||0),
+          happiness:(cur.happiness||0)+(d.happiness||0),
+          health:   (cur.health   ||0)+(d.health   ||0),
+        };
+      }
+      next.itemBonuses=bonuses;
     }
     if(ev.item){
       const items=[...(next.items||st.items)];
@@ -864,7 +942,7 @@
     }
   }
   async function showEventOverlay(ev){
-    setEventItemThumb(ev.requireItem||null);
+    setEventItemThumb(ev.upgradeItem?.to||ev.item||ev.requireItem||null);
     $('event-name-text').textContent=substitutePlayerName(ev.name,myName);
     $('event-effect-text').textContent=effectsText(ev);
     $('event-overlay').classList.remove('hidden');
@@ -1647,7 +1725,7 @@
   async function showObserverEventOverlay(ev){
     const p=players.find(pl=>pl.player_id===ev.pid);
     $('event-observer-label').textContent=p?`${p.player_name} のイベント`:'';
-    setEventItemThumb(ev.requireItem||null);
+    setEventItemThumb(ev.upgradeItem?.to||ev.item||ev.requireItem||null);
     $('event-name-text').textContent=ev.eventName||'';
     $('event-effect-text').textContent=ev.eventEffect||'';
     $('event-overlay').classList.add('observer');
