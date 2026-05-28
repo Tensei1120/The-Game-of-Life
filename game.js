@@ -1153,6 +1153,7 @@
     'イーロン・マスクメロン': 'items/IMG_3682.jpg',
     '大選手養成ギプス':       'items/IMG_3685.jpg',
     '根性':                   'items/IMG_3702.jpg',
+    '親のセワ':               'items/IMG_3683.jpg',
   };
   // エッジから連結した白ピクセルのみ除去（内部の白は保持）
   function removeWhiteBg(srcImg){
