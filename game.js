@@ -78,7 +78,7 @@
     { id:33, minPos:11, maxPos:19, requireNotItem:'好きな人', name:'文化祭で一目惚れした。', item:'好きな人' },
     { id:36, minPos:11, maxPos:19, requireNotItem:'塾のテキスト', name:'あたし、やっぱり慶應にいきたい。', item:'塾のテキスト' },
     // ── 好きな人 限定 ──
-    { id:40, minPos:11, maxPos:19, requireItem:'好きな人', name:'好きな人と付き合った！', happiness:10, upgradeItem:{from:'好きな人',to:'恋人'} },
+    { id:40, minPos:11, maxPos:19, requireItem:'好きな人', requireNotItem:'男子校の呪い', name:'好きな人と付き合った！', happiness:10, upgradeItem:{from:'好きな人',to:'恋人'} },
     // ── 昭和親父 限定 ──
     { id:41, minPos:11, maxPos:19, requireItems:['昭和親父','大選手養成ギプス'], name:'度を越えたトレーニングをさせられた。', upgradeItem:{from:'大選手養成ギプス',to:'ジーザス・ギプス'} },
     { id:42, minPos:11, maxPos:19, requireItem:'昭和親父', name:'「甲子園に出たくらいで調子に乗るな馬鹿者！優勝せんかったらお前は一年間飯抜きだ！」', happiness:-5 },
@@ -109,12 +109,12 @@
     'イーロン・マスクメロン': { desc:'毎ターン50万円獲得\n捨てると200万円獲得',                               perTurn:{money:50},                      onDiscard:{money:200} },
     '大選手養成ギプス': { desc:'毎ターン幸福度-1・健康度-3',                                                    perTurn:{happiness:-1,health:-3} },
     '根性':             { desc:'健康度-5まで入院回避\n入院代が二倍になる' },
-    '男子校の呪い':     { desc:'「恋人」ができない', blockItems:['恋人'] },
-    '女子校ブランド':   { desc:'（効果未定）' },
+    '男子校の呪い':     { desc:'「恋人」イベントが発生しない' },
+    '女子校ブランド':   { desc:'毎ターン+2万円', perTurn:{money:2} },
     '悪い友達':         { desc:'毎ターン+5万円', perTurn:{money:5} },
-    '黒歴史ノート':     { desc:'（効果未定）' },
+    '黒歴史ノート':     { desc:'毎ターン幸福度-5', perTurn:{happiness:-5} },
     '恋人':             { desc:'毎ターン幸福度+6', perTurn:{happiness:6} },
-    '金持ち友達':       { desc:'（効果未定）' },
+    '金持ち友達':       { desc:'毎ターン+5万円', perTurn:{money:5} },
     'ジーザス・ギプス': { desc:'毎ターン幸福度-1・健康度-4', perTurn:{happiness:-1,health:-4} },
     '自転車':           { desc:'移動時サイコロ+1\n捨てると3万円獲得', diceBonus:1, onDiscard:{money:3} },
   };
@@ -877,9 +877,7 @@
         next.__new_item_slots=[...(st.__new_item_slots||[]),slot];
       } else next._pendingItem=itemName;
     }
-    // blockItems チェック：所持アイテムがブロックしている場合は取得しない
-    const isBlocked=name=>(next.items||st.items).some(i=>i&&ITEMS[i]?.blockItems?.includes(name));
-    if(ev.item&&!isBlocked(ev.item)){
+    if(ev.item){
       const items=[...(next.items||st.items)];
       const slot=items.indexOf(null);
       if(slot>=0){
@@ -888,12 +886,9 @@
       } else next._pendingItem=ev.item;
     }
     if(ev.upgradeItem){
-      const to=ev.upgradeItem.to;
-      if(!isBlocked(to)){
-        const items=[...(next.items||st.items)];
-        const idx=items.indexOf(ev.upgradeItem.from);
-        if(idx>=0){ items[idx]=to; next.items=items; }
-      }
+      const items=[...(next.items||st.items)];
+      const idx=items.indexOf(ev.upgradeItem.from);
+      if(idx>=0){ items[idx]=ev.upgradeItem.to; next.items=items; }
     }
     return next;
   }
@@ -1177,6 +1172,9 @@
     '恋人':                   'items/IMG_3712.jpg',
     '自転車':                 'items/IMG_3713.jpg',
     '男子校の呪い':           'items/IMG_3728.jpg',
+    '女子校ブランド':         'items/IMG_3729.jpg',
+    '黒歴史ノート':           'items/IMG_3730.jpg',
+    '金持ち友達':             'items/IMG_3731.jpg',
   };
   // エッジから連結した白ピクセルのみ除去（内部の白は保持）
   function removeWhiteBg(srcImg){
