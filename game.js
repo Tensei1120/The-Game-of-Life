@@ -127,15 +127,16 @@
   };
 
   const UNIVERSITIES = [
-    { name:'Fラン大学生', prob:0.20, tuition:40 },
-    { name:'専門学校生',  prob:0.30, tuition:40 },
-    { name:'普通大学生',  prob:0.30, tuition:40 },
-    { name:'高学歴学生',  prob:0.15, tuition:50 },
-    { name:'医学部生',    prob:0.05, tuition:100 },
+    { name:'Fラン大学生', prob:0.20, probJuku:0.10, tuition:40 },
+    { name:'専門学校生',  prob:0.30, probJuku:0.10, tuition:40 },
+    { name:'普通大学生',  prob:0.30, probJuku:0.30, tuition:40 },
+    { name:'高学歴学生',  prob:0.15, probJuku:0.30, tuition:50 },
+    { name:'医学部生',    prob:0.05, probJuku:0.20, tuition:100 },
   ];
-  function rollUniversity(){
+  function rollUniversity(items=[]){
+    const hasJuku=items.includes('塾のテキスト');
     let r=Math.random();
-    for(const u of UNIVERSITIES){ r-=u.prob; if(r<=0) return u; }
+    for(const u of UNIVERSITIES){ r-=(hasJuku?u.probJuku:u.prob); if(r<=0) return u; }
     return UNIVERSITIES[UNIVERSITIES.length-1];
   }
 
@@ -721,7 +722,7 @@
 
     // 浪人中：大学再抽選（サイコロは振らない）
     if(st.ronin){
-      const u=rollUniversity();
+      const u=rollUniversity(st.items||[]);
       const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
       pendingCommit={newSt:{...st},newUsedIds:usedIds,_isUniAssign:true,_uniResult:u};
       showUniAssignOverlay(u);
@@ -1050,7 +1051,7 @@
 
     // 大学ルート到着：振り分け
     if(newPos===BRANCH_START&&route==='uni'){
-      const u=rollUniversity();
+      const u=rollUniversity(newSt.items||[]);
       const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
       pendingCommit={newSt,newUsedIds:usedIds,_isUniAssign:true,_uniResult:u};
       await sleep(350);
