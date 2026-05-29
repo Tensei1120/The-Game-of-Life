@@ -147,12 +147,18 @@
         let r=Math.random()*100, chosen='money';
         for(const b of pool){r-=b.w;if(r<=0){chosen=b.type;break;}}
         if(chosen==='money')     return [{sourceItem:'キングボ〇ビー',name:'ガーハッハッハッハ！お前をボ〇ビラスな世界に連れてってやろう！',money:-100}];
-        if(chosen==='evolve')    return [{sourceItem:'キングボ〇ビー',name:'おや…？キングボ〇ビーの様子がおかしいぞ…？',upgradeItem:{from:'キングボ〇ビー',to:'デット・エンド'}}];
+        if(chosen==='evolve')    return [{sourceItem:'キングボ〇ビー',name:'おや…？キングボ〇ビーの様子がおかしいぞ…？',upgradeItem:{from:'キングボ〇ビー',to:'デット・エンド'},triggerFieldEffect:'panic'}];
         if(chosen==='devil')     return [{sourceItem:'キングボ〇ビー',name:'プレゼントを売ってやろう！！',money:-100,giveItem:'デビル'}];
         return [{sourceItem:'キングボ〇ビー',name:'悪夢を見せてやろう！！',money:-500,happiness:-5,health:-5}];
       }
     },
-    'デット・エンド':   { desc:'（効果未定）', undiscardable:true },
+    'デット・エンド':   { desc:'捨てられない\n接触で転移\n毎ターンイベント発生', undiscardable:true,
+      perTurnEvents(st){
+        const r=Math.random();
+        if(r<0.80) return [{sourceItem:'デット・エンド',name:'止…めて……。お…ねがい……と……め…………。',money:-2000,giveItem:'デビル'}];
+        return [{sourceItem:'デット・エンド',name:'悪夢が終わった。',removeItem:'デット・エンド',endFieldEffect:true}];
+      }
+    },
     'デビル':           { desc:'毎ターン−5万円・幸福度−1・健康度−1\n捨てられない', undiscardable:true, perTurn:{money:-5,happiness:-1,health:-1} },
   };
 
@@ -947,7 +953,7 @@
       if(slot>=0){
         items[slot]=itemName; next.items=items;
         next.__new_item_slots=[...(st.__new_item_slots||[]),slot];
-      } else next._pendingItem=itemName;
+      } else if(!allUndiscardable(items,{...next})) next._pendingItem=itemName;
     }
     if(ev.items){
       for(const evItem of ev.items){
@@ -956,7 +962,7 @@
         if(slot>=0){
           items[slot]=evItem; next.items=items;
           next.__new_item_slots=[...(next.__new_item_slots||st.__new_item_slots||[]),slot];
-        } else { next._pendingItem=evItem; break; }
+        } else if(!allUndiscardable(items,{...next})){ next._pendingItem=evItem; break; }
       }
     }
     if(ev.item){
@@ -965,7 +971,7 @@
       if(slot>=0){
         items[slot]=ev.item; next.items=items;
         next.__new_item_slots=[...(st.__new_item_slots||[]),slot];
-      } else next._pendingItem=ev.item;
+      } else if(!allUndiscardable(items,{...next})) next._pendingItem=ev.item;
     }
     if(ev.upgradeItem){
       const items=[...(next.items||st.items)];
@@ -1044,7 +1050,7 @@
     return st;
   }
 
-  const TRANSFER_ITEMS = ['貧〇神','キングボ〇ビー'];
+  const TRANSFER_ITEMS = ['貧〇神','キングボ〇ビー','デット・エンド'];
 
   function checkInfections(fromPos, toPos, movingSt){
     const myBacteria=(movingSt.items||[]).filter(i=>i&&isBacteriaItem(i));
@@ -1110,6 +1116,7 @@
       const items=[...(next.items||st.items)];
       const slot=items.indexOf(null);
       if(slot>=0){ items[slot]=ev.giveItem; next.items=items; }
+      // 全スロット捨てられない場合は自動破棄（何もしない）
     }
     if(ev.removeRandomItem){
       const candidates=(st.items||[]).map((i,idx)=>({i,idx})).filter(({i})=>i&&!TRANSFER_ITEMS.includes(i)&&i!=='貧〇神');
@@ -1118,6 +1125,11 @@
         const items=[...next.items]; items[pick.idx]=null; next.items=items;
         ev._removedItem=pick.i;
       }
+    }
+    if(ev.removeItem){
+      const items=[...(next.items||st.items)];
+      const idx=items.indexOf(ev.removeItem);
+      if(idx>=0){ items[idx]=null; next.items=items; }
     }
     if(ev.upgradeItem){
       const items=[...(next.items||st.items)];
@@ -1135,7 +1147,10 @@
     if(ev.setJob)    p.push(`職業「${ev.setJob}」になる！`);
     if(ev.giveItem)  p.push(`アイテム「${ev.giveItem}」を獲得！`);
     if(ev.removeRandomItem) p.push(ev._removedItem?`アイテム「${ev._removedItem}」が捨てられた…`:'アイテムが捨てられた…');
+    if(ev.removeItem)  p.push(`アイテム「${ev.removeItem}」を失った…`);
     if(ev.upgradeItem) p.push(`「${ev.upgradeItem.from}」が「${ev.upgradeItem.to}」に進化！`);
+    if(ev.triggerFieldEffect==='panic')  p.push('恐慌発生！');
+    if(ev.endFieldEffect)                p.push('恐慌が終わった。');
     return p.join('\n');
   }
 
@@ -1155,7 +1170,12 @@
     for(const ev of evs) await showPerTurnItemEventOverlay(ev);
   }
 
-  function isPandemic(){ return !!playerData.__pandemic; }
+  function currentFieldEffect(){ return playerData.__fieldEffect||null; }
+
+  // 全スロットが埋まっていて、かつ全て捨てられない場合は true（新アイテムは自動破棄）
+  function allUndiscardable(items, st){
+    return items.every(i=>i!==null) && items.every(i=>!canDiscard(i,st));
+  }
 
   async function saveRoll(st,newPos,route,roll=1){
     lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null,eventRequireItem:null};
@@ -1244,7 +1264,12 @@
     newSt=applyPerTurnEffects(newSt);
     // アイテム毎ターンイベント（貧〇神・モラえもん等）を収集・適用
     const ptEvs=collectPerTurnItemEvents(newSt);
-    for(const ev of ptEvs) newSt=applyPerTurnItemEvent(newSt,ev);
+    let fieldEffectChange=null; // 'panic'|'none'|null
+    for(const ev of ptEvs){
+      newSt=applyPerTurnItemEvent(newSt,ev);
+      if(ev.triggerFieldEffect) fieldEffectChange=ev.triggerFieldEffect;
+      if(ev.endFieldEffect)     fieldEffectChange='none';
+    }
     newSt=clampStats(newSt);
     let wasJustHospitalized = false;
     const hospThreshold = (newSt.items||[]).includes('根性') ? -5 : 0;
@@ -1256,11 +1281,18 @@
     newData.__used_events=newUsedIds;
     if(lastActionInfo){newData.__last_action={...lastActionInfo};lastActionInfo=null;}
 
-    // ── アイテムフィールド効果：パンデミック判定 ──
-    // 全アクティブプレイヤーが菌アイテムを所持していたらパンデミック発動
+    // ── フィールド効果管理（パンデミック / 恐慌）重複不可 ──
     const activePlayers=players.filter(p=>{ const s=getStats(newData[p.player_id]); return !s.finished&&!s.eliminated; });
-    newData.__pandemic = activePlayers.length>0 &&
+    const prevFE=playerData.__fieldEffect||null;
+    // ① アイテムイベントによるフィールド効果変化
+    if(fieldEffectChange==='none') newData.__fieldEffect=null;
+    else if(fieldEffectChange)     newData.__fieldEffect=fieldEffectChange;
+    else                           newData.__fieldEffect=prevFE;
+    // ② パンデミック条件チェック（条件が成立すれば上書き・解除も上書き）
+    const pandemicMet=activePlayers.length>0&&
       activePlayers.every(p=>(getStats(newData[p.player_id]).items||[]).some(i=>i&&isBacteriaItem(i)));
+    if(pandemicMet)                          newData.__fieldEffect='pandemic';
+    else if(newData.__fieldEffect==='pandemic') newData.__fieldEffect=null;
 
     const isInactive=p=>{ const s=getStats(newData[p.player_id]); return s.finished||s.eliminated; };
     const inactiveCount=players.filter(isInactive).length;
@@ -1605,20 +1637,25 @@
     branchSquares.uni.forEach(sq=>drawBranchSquare(sq));
     drawBranchLabels();
     drawTokens();
-    if(isPandemic()) drawPandemicOverlay();
+    const fe=currentFieldEffect();
+    if(fe) drawFieldEffectOverlay(fe);
   }
 
-  function drawPandemicOverlay(){
+  function drawFieldEffectOverlay(fe){
     ctx.save();
-    ctx.fillStyle='rgba(160,0,0,0.12)';
-    ctx.fillRect(0,0,CW,CH);
-    ctx.font='bold 68px Segoe UI';
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
-    ctx.shadowColor='rgba(255,0,0,0.7)';
-    ctx.shadowBlur=28;
-    ctx.fillStyle='rgba(204,16,16,0.9)';
-    ctx.fillText('🦠 パンデミック', CW/2, 58);
+    if(fe==='pandemic'){
+      ctx.fillStyle='rgba(160,0,0,0.12)'; ctx.fillRect(0,0,CW,CH);
+      ctx.font='bold 68px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor='rgba(255,0,0,0.7)'; ctx.shadowBlur=28;
+      ctx.fillStyle='rgba(204,16,16,0.9)';
+      ctx.fillText('🦠 パンデミック', CW/2, 58);
+    } else if(fe==='panic'){
+      ctx.fillStyle='rgba(0,0,100,0.13)'; ctx.fillRect(0,0,CW,CH);
+      ctx.font='bold 68px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.shadowColor='rgba(20,20,255,0.7)'; ctx.shadowBlur=28;
+      ctx.fillStyle='rgba(30,30,220,0.9)';
+      ctx.fillText('💸 恐慌', CW/2, 58);
+    }
     ctx.restore();
   }
 
