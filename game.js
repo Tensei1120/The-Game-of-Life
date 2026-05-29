@@ -1238,7 +1238,7 @@
   function getItemImg(item){
     if(!item) return null;
     if(ITEM_IMG[item]) return ITEM_IMG[item];
-    if(isBacteriaItem(item)) return 'items/IMG_3671.jpg';
+    if(isBacteriaItem(item)) return 'items/IMG_3688.jpg';
     return `items/${item}.png`;
   }
   // エッジから連結した白ピクセルのみ除去（内部の白は保持）
