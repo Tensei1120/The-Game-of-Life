@@ -52,7 +52,9 @@
     { id:23, minPos:1, maxPos:10, requireItem:'貧困家庭', name:'久しぶりの外食！それでも俺はチキンライスでいいや。', happiness:5, health:1 },
     { id:24, minPos:1, maxPos:10, requireItem:'貧困家庭', name:'泣き腫らした目で、一般家庭を睨んだ。', happiness:-3, item:'根性' },
     { id:50, minPos:1, maxPos:10, name:'あの頃みたいな友達は、もうできない。', item:'友達' },
-    { id:51, minPos:1, maxPos:10, name:'「（プレイヤー名）菌だ！」と言われ、逃げ回られる。', happiness:-2, nameItem:'菌' },
+    { id:51, minPos:1, maxPos:10, special:true, name:'「（プレイヤー名）菌だ！」と言われ、逃げ回られる。', happiness:-2, nameItem:'菌' },
+    { id:55, minPos:1, maxPos:10, special:true, name:'クリボーに当たって死んだ！', eliminate:true },
+    { id:56, minPos:1, maxPos:10, special:true, name:'未来からモラえもんがやってきた！', item:'モラえもん' },
     // ── 親のスネ 限定 ──
     { id:52, minPos:1, maxPos:10, requireItem:'親のスネ', name:'自転車を買ってもらった！', item:'自転車' },
     // ── 職業「俳優」限定 ──
@@ -116,6 +118,7 @@
     '恋人':             { desc:'毎ターン幸福度+6', perTurn:{happiness:6} },
     '金持ち友達':       { desc:'毎ターン+5万円', perTurn:{money:5} },
     'ジーザス・ギプス': { desc:'毎ターン幸福度-1・健康度-4', perTurn:{happiness:-1,health:-4} },
+    'モラえもん':       { desc:'（効果未定）' },
     '自転車':           { desc:'移動時サイコロ+1\n捨てると3万円獲得', diceBonus:1, onDiscard:{money:3} },
   };
 
@@ -161,7 +164,7 @@
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
              items:Array(6).fill(null), job:null, route:null, finished:false,
              hospitalized:false, hospitalPos:0, hospitalTurns:0, prevMapPos:0,
-             itemBonuses:{}, jobBonuses:{} };
+             itemBonuses:{}, jobBonuses:{}, eliminated:false };
   }
   function clampStats(st) {
     return { ...st,
@@ -636,7 +639,8 @@
     const ind=$('turn-indicator');
     if(isMyTurn){ind.textContent='あなたのターンです！';ind.style.color='#228844';}
     else{ind.textContent=(cp?.player_name||'?')+' のターン';ind.style.color=cp?.color||'#1565c0';}
-    const myFinished=!!getStats(playerData[myId]).finished;
+    const mySt=getStats(playerData[myId]);
+    const myFinished=!!mySt.finished||!!mySt.eliminated;
     const rb=$('btn-roll');
     rb.style.display=(isMyTurn&&!myFinished)?'block':'none';rb.disabled=false;rolling=false;
     $('turn-number').textContent=turnNumber;
@@ -813,6 +817,7 @@
   }
   function effectsText(ev){
     const p=[];
+    if(ev.eliminate)   p.push('脱落…観戦者になる。');
     if(ev.upgradeItem) p.push(`「${ev.upgradeItem.from}」が「${ev.upgradeItem.to}」に進化！`);
     if(ev.item)        p.push(`アイテム「${ev.item}」を獲得！`);
     if(ev.removeItem)  p.push(`アイテム「${ev.removeItem}」を失った…`);
@@ -839,6 +844,7 @@
   }
   function applyEventToStats(st,ev){
     const next={...st};
+    if(ev.eliminate)   next.eliminated=true;
     if(ev.money)     next.money=st.money+ev.money;
     if(ev.happiness) next.happiness=st.happiness+ev.happiness;
     if(ev.health)    next.health=st.health+ev.health;
@@ -1025,8 +1031,9 @@
     const newData={...playerData,[myId]:newSt};
     newData.__used_events=newUsedIds;
     if(lastActionInfo){newData.__last_action={...lastActionInfo};lastActionInfo=null;}
-    const finishedCount=players.filter(p=>getStats(newData[p.player_id]).finished).length;
-    if(players.length>1&&finishedCount>=players.length-1){
+    const isInactive=p=>{ const s=getStats(newData[p.player_id]); return s.finished||s.eliminated; };
+    const inactiveCount=players.filter(isInactive).length;
+    if(players.length>1&&inactiveCount>=players.length-1){
       await sb.from('rooms').update({
         alive_cells:newData, status:'finished',
         current_player_index:currentPlayerIndex, turn_number:turnNumber,
@@ -1035,7 +1042,7 @@
     }
     let nextIndex=(currentPlayerIndex+1)%players.length;
     for(let i=0;i<players.length;i++){
-      if(!getStats(newData[players[nextIndex].player_id]).finished) break;
+      if(!isInactive(players[nextIndex])) break;
       nextIndex=(nextIndex+1)%players.length;
     }
     const nextTurn=nextIndex<=currentPlayerIndex?turnNumber+1:turnNumber;
@@ -1639,7 +1646,7 @@
     const byKey={};
     players.forEach(p=>{
       const st=getStats(playerData[p.player_id]);
-      if(st.hospitalized) return;
+      if(st.hospitalized||st.eliminated) return;
       const bsq=getBranchSq(st.pos,st.route);
       const sq=bsq||squares[st.pos];
       if(!sq)return;
