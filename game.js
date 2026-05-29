@@ -778,6 +778,7 @@
     return pos>0&&pos<100&&!FORCED_STOPS.includes(pos);
   }
   function pickEvent(pos,usedIds,items=[],job=null){
+    const hasItems=items.some(i=>i);
     const av=EVENTS.filter(e=>{
       if(pos<e.minPos||pos>e.maxPos||usedIds.includes(e.id)) return false;
       if(e.requireItem&&!items.includes(e.requireItem)) return false;
@@ -786,14 +787,25 @@
       if(e.requireJob&&e.requireJob!==job) return false;
       return true;
     });
-    const conditional=av.filter(e=>e.requireItem||e.requireItems||e.requireJob);
-    const general=av.filter(e=>!e.requireItem&&!e.requireItems&&!e.requireJob);
-    if(!conditional.length) return general.length?general[Math.floor(Math.random()*general.length)]:null;
-    // アイテム限定 50%、全員共通 50%
-    const pool=Math.random()<0.5?conditional:general;
-    if(pool.length) return pool[Math.floor(Math.random()*pool.length)];
-    const fallback=pool===conditional?general:conditional;
-    return fallback.length?fallback[Math.floor(Math.random()*fallback.length)]:null;
+    const special = av.filter(e=>e.special);
+    const jobEvs  = av.filter(e=>!e.special&&e.requireJob);
+    const itemEvs = av.filter(e=>!e.special&&!e.requireJob&&(e.requireItem||e.requireItems));
+    const general = av.filter(e=>!e.special&&!e.requireJob&&!e.requireItem&&!e.requireItems);
+
+    // 確率テーブル（空バケットは除外して正規化）
+    let buckets;
+    if(job && hasItems)     buckets=[{p:general,w:30},{p:itemEvs,w:30},{p:jobEvs,w:30},{p:special,w:10}];
+    else if(job)            buckets=[{p:general,w:45},{p:jobEvs,w:45},{p:special,w:10}];
+    else if(hasItems)       buckets=[{p:general,w:50},{p:itemEvs,w:40},{p:special,w:10}];
+    else                    buckets=[{p:general,w:90},{p:special,w:10}];
+
+    const active=buckets.filter(b=>b.p.length>0);
+    if(!active.length) return null;
+    const total=active.reduce((s,b)=>s+b.w,0);
+    let r=Math.random()*total;
+    for(const b of active){ r-=b.w; if(r<=0) return b.p[Math.floor(Math.random()*b.p.length)]; }
+    const last=active[active.length-1];
+    return last.p[Math.floor(Math.random()*last.p.length)];
   }
   function substitutePlayerName(text,name){
     return text.replace(/（プレイヤー名）|\(プレイヤー名\)/g,name);
