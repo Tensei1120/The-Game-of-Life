@@ -141,7 +141,19 @@
         return [{sourceItem:'貧〇神',name:'おや…？貧〇神の様子がおかしいぞ…？',upgradeItem:{from:'貧〇神',to:'キングボ〇ビー'}}];
       }
     },
-    'キングボ〇ビー':   { desc:'（効果未定）', undiscardable:true },
+    'キングボ〇ビー':   { desc:'捨てられない\n接触で転移\n毎ターンイベント発生', undiscardable:true,
+      perTurnEvents(st){
+        const pool=[{w:50,type:'money'},{w:20,type:'evolve'},{w:20,type:'devil'},{w:10,type:'nightmare'}];
+        let r=Math.random()*100, chosen='money';
+        for(const b of pool){r-=b.w;if(r<=0){chosen=b.type;break;}}
+        if(chosen==='money')     return [{sourceItem:'キングボ〇ビー',name:'ガーハッハッハッハ！お前をボ〇ビラスな世界に連れてってやろう！',money:-100}];
+        if(chosen==='evolve')    return [{sourceItem:'キングボ〇ビー',name:'おや…？キングボ〇ビーの様子がおかしいぞ…？',upgradeItem:{from:'キングボ〇ビー',to:'デット・エンド'}}];
+        if(chosen==='devil')     return [{sourceItem:'キングボ〇ビー',name:'プレゼントを売ってやろう！！',money:-100,giveItem:'デビル'}];
+        return [{sourceItem:'キングボ〇ビー',name:'悪夢を見せてやろう！！',money:-500,happiness:-5,health:-5}];
+      }
+    },
+    'デット・エンド':   { desc:'（効果未定）', undiscardable:true },
+    'デビル':           { desc:'毎ターン−5万円・幸福度−1・健康度−1\n捨てられない', undiscardable:true, perTurn:{money:-5,happiness:-1,health:-1} },
   };
 
   const JOBS = {
@@ -1090,8 +1102,15 @@
 
   function applyPerTurnItemEvent(st,ev){
     let next={...st};
-    if(ev.money)    next.money=(st.money||0)+ev.money;
-    if(ev.setJob)   next.job=ev.setJob;
+    if(ev.money)     next.money=(st.money||0)+ev.money;
+    if(ev.happiness) next.happiness=(st.happiness||0)+ev.happiness;
+    if(ev.health)    next.health=(st.health||0)+ev.health;
+    if(ev.setJob)    next.job=ev.setJob;
+    if(ev.giveItem){
+      const items=[...(next.items||st.items)];
+      const slot=items.indexOf(null);
+      if(slot>=0){ items[slot]=ev.giveItem; next.items=items; }
+    }
     if(ev.removeRandomItem){
       const candidates=(st.items||[]).map((i,idx)=>({i,idx})).filter(({i})=>i&&!TRANSFER_ITEMS.includes(i)&&i!=='貧〇神');
       if(candidates.length>0){
@@ -1110,8 +1129,11 @@
 
   function perTurnItemEventEffectsText(ev){
     const p=[];
-    if(ev.money) p.push(ev.money>0?`${ev.money}万円獲得！`:`${Math.abs(ev.money)}万円失った…`);
-    if(ev.setJob) p.push(`職業「${ev.setJob}」になる！`);
+    if(ev.money)     p.push(ev.money>0?`${ev.money}万円獲得！`:`${Math.abs(ev.money)}万円失った…`);
+    if(ev.happiness) p.push(`幸福度 ${ev.happiness>0?'+':''}${ev.happiness}`);
+    if(ev.health)    p.push(`健康度 ${ev.health>0?'+':''}${ev.health}`);
+    if(ev.setJob)    p.push(`職業「${ev.setJob}」になる！`);
+    if(ev.giveItem)  p.push(`アイテム「${ev.giveItem}」を獲得！`);
     if(ev.removeRandomItem) p.push(ev._removedItem?`アイテム「${ev._removedItem}」が捨てられた…`:'アイテムが捨てられた…');
     if(ev.upgradeItem) p.push(`「${ev.upgradeItem.from}」が「${ev.upgradeItem.to}」に進化！`);
     return p.join('\n');
@@ -1391,6 +1413,8 @@
     'ゲーム機':             'linear-gradient(150deg,#7060e0 0%,#3020a0 100%)',
     '貧〇神':               'linear-gradient(150deg,#a08860 0%,#604820 100%)',
     'キングボ〇ビー':       'linear-gradient(150deg,#ffd060 0%,#e08800 100%)',
+    'デット・エンド':       'linear-gradient(150deg,#303040 0%,#101018 100%)',
+    'デビル':               'linear-gradient(150deg,#e03030 0%,#800000 100%)',
   };
   // 全アイテムの画像パス（拡張子が .png のものは明示的に記載）
   const ITEM_IMG = {
