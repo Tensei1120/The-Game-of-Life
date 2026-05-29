@@ -55,6 +55,7 @@
     { id:51, minPos:1, maxPos:10, special:true, name:'「（プレイヤー名）菌だ！」と言われ、逃げ回られる。', happiness:-2, nameItem:'菌' },
     { id:55, minPos:1, maxPos:10, special:true, name:'クリボーに当たって死んだ！', eliminate:true },
     { id:56, minPos:1, maxPos:10, special:true, name:'未来からモラえもんがやってきた！', item:'モラえもん' },
+    { id:57, minPos:1, maxPos:70, special:true, requireNotItem:'教育ママ', name:'大人気ゲームを購入！', money:-2, happiness:3, items:['ゲーム機','貧〇神'] },
     // ── 親のスネ 限定 ──
     { id:52, minPos:1, maxPos:10, requireItem:'親のスネ', name:'自転車を買ってもらった！', item:'自転車' },
     // ── 職業「俳優」限定 ──
@@ -118,12 +119,34 @@
     '恋人':             { desc:'毎ターン幸福度+6', perTurn:{happiness:6} },
     '金持ち友達':       { desc:'毎ターン+5万円', perTurn:{money:5} },
     'ジーザス・ギプス': { desc:'毎ターン幸福度-1・健康度-4', perTurn:{happiness:-1,health:-4} },
-    'モラえもん':       { desc:'（効果未定）' },
+    'モラえもん':       { desc:'毎ターンランダムアイテム獲得' },
     '自転車':           { desc:'移動時サイコロ+1\n捨てると3万円獲得', diceBonus:1, onDiscard:{money:3} },
+    'ゲーム機':         { desc:'毎ターン幸福度+4', perTurn:{happiness:4} },
+    '貧〇神':           { desc:'捨てられない\n接触で転移\n毎ターンイベント発生', undiscardable:true,
+      perTurnEvents(st){
+        const others=(st.items||[]).filter(i=>i&&i!=='貧〇神'&&i!=='キングボ〇ビー');
+        const inRange=st.pos>=30&&st.pos<=90;
+        const pool=[
+          {w:50,type:'money'},
+          ...(others.length>0?[{w:10,type:'removeItem'}]:[]),
+          ...(inRange?[{w:10,type:'retire'}]:[]),
+          {w:30,type:'evolve'},
+        ];
+        const total=pool.reduce((s,b)=>s+b.w,0);
+        let r=Math.random()*total, chosen='evolve';
+        for(const b of pool){r-=b.w;if(r<=0){chosen=b.type;break;}}
+        if(chosen==='money') return [{sourceItem:'貧〇神',name:`${myName}社長のお金を捨てて、財布を軽くしてあげるねん！`,money:-10}];
+        if(chosen==='removeItem') return [{sourceItem:'貧〇神',name:'アイテム多すぎるねん！捨てて楽にしてあげるねん！',removeRandomItem:true}];
+        if(chosen==='retire') return [{sourceItem:'貧〇神',name:`${myName}社長に今の仕事はあってないねん！退職代行してきたねん！`,setJob:'ニート'}];
+        return [{sourceItem:'貧〇神',name:'おや…？貧〇神の様子がおかしいぞ…？',upgradeItem:{from:'貧〇神',to:'キングボ〇ビー'}}];
+      }
+    },
+    'キングボ〇ビー':   { desc:'（効果未定）', undiscardable:true },
   };
 
   const JOBS = {
     '俳優': { salary:0, happiness:2, health:1, desc:'給料0万/ターン\n幸福度+2・健康度+1' },
+    'ニート': { salary:0, happiness:0, health:0, desc:'（効果未定）' },
   };
 
   const UNIVERSITIES = [
@@ -855,6 +878,7 @@
     if(ev.money)       p.push(ev.money>0?`${ev.money}万円 獲得！`:`${Math.abs(ev.money)}万円 失った...`);
     if(ev.happiness)   p.push(`幸福度 ${ev.happiness>0?'+':''}${ev.happiness}`);
     if(ev.health)      p.push(`健康度 ${ev.health>0?'+':''}${ev.health}`);
+    if(ev.items) ev.items.forEach(i=>p.push(`アイテム「${i}」を獲得！`));
     if(ev.nameItem) p.push(`アイテム「○○${ev.nameItem}」を獲得！`);
     if(ev.itemBonusDelta){
       for(const [itm,d] of Object.entries(ev.itemBonusDelta)){
@@ -912,6 +936,16 @@
         items[slot]=itemName; next.items=items;
         next.__new_item_slots=[...(st.__new_item_slots||[]),slot];
       } else next._pendingItem=itemName;
+    }
+    if(ev.items){
+      for(const evItem of ev.items){
+        const items=[...(next.items||st.items)];
+        const slot=items.indexOf(null);
+        if(slot>=0){
+          items[slot]=evItem; next.items=items;
+          next.__new_item_slots=[...(next.__new_item_slots||st.__new_item_slots||[]),slot];
+        } else { next._pendingItem=evItem; break; }
+      }
     }
     if(ev.item){
       const items=[...(next.items||st.items)];
@@ -998,6 +1032,8 @@
     return st;
   }
 
+  const TRANSFER_ITEMS = ['貧〇神','キングボ〇ビー'];
+
   function checkInfections(fromPos, toPos, movingSt){
     const myBacteria=(movingSt.items||[]).filter(i=>i&&isBacteriaItem(i));
     let updatedSelf=movingSt;
@@ -1008,16 +1044,93 @@
         const otherSt=getStats(playerData[p.player_id]);
         if(otherSt.finished||otherSt.eliminated||otherSt.hospitalized) continue;
         if(otherSt.pos!==pos) continue;
-        // spread my bacteria to other player
+
         let cur=infectedOthers[p.player_id]||otherSt;
+
+        // 菌：コピー（双方向）
         for(const b of myBacteria) cur=infectSt(cur,b);
-        infectedOthers[p.player_id]=cur;
-        // spread other player's bacteria to me
         const theirBacteria=(otherSt.items||[]).filter(i=>i&&isBacteriaItem(i));
         for(const b of theirBacteria) updatedSelf=infectSt(updatedSelf,b);
+
+        // 貧〇神・キングボ〇ビー：転移（元のプレイヤーは失う）
+        for(const ti of TRANSFER_ITEMS){
+          const selfHas=(updatedSelf.items||[]).includes(ti);
+          const otherHas=(cur.items||[]).includes(ti);
+          if(selfHas&&!otherHas){
+            const slot=(cur.items||[]).indexOf(null);
+            if(slot>=0){
+              const oi=[...cur.items]; oi[slot]=ti; cur={...cur,items:oi};
+              const si=[...updatedSelf.items]; si[si.indexOf(ti)]=null; updatedSelf={...updatedSelf,items:si};
+            }
+          } else if(otherHas&&!selfHas){
+            const slot=(updatedSelf.items||[]).indexOf(null);
+            if(slot>=0){
+              const si=[...updatedSelf.items]; si[slot]=ti; updatedSelf={...updatedSelf,items:si};
+              const oi=[...cur.items]; oi[oi.indexOf(ti)]=null; cur={...cur,items:oi};
+            }
+          }
+        }
+
+        infectedOthers[p.player_id]=cur;
       }
     }
     return {updatedSelf,infectedOthers};
+  }
+
+  // ── アイテム毎ターンイベントシステム ──
+  function collectPerTurnItemEvents(st){
+    const evs=[];
+    for(const item of (st.items||[])){
+      if(!item) continue;
+      const fn=ITEMS[item]?.perTurnEvents;
+      if(typeof fn==='function'){ const r=fn(st); if(r) evs.push(...r); }
+    }
+    return evs;
+  }
+
+  function applyPerTurnItemEvent(st,ev){
+    let next={...st};
+    if(ev.money)    next.money=(st.money||0)+ev.money;
+    if(ev.setJob)   next.job=ev.setJob;
+    if(ev.removeRandomItem){
+      const candidates=(st.items||[]).map((i,idx)=>({i,idx})).filter(({i})=>i&&!TRANSFER_ITEMS.includes(i)&&i!=='貧〇神');
+      if(candidates.length>0){
+        const pick=candidates[Math.floor(Math.random()*candidates.length)];
+        const items=[...next.items]; items[pick.idx]=null; next.items=items;
+        ev._removedItem=pick.i;
+      }
+    }
+    if(ev.upgradeItem){
+      const items=[...(next.items||st.items)];
+      const idx=items.indexOf(ev.upgradeItem.from);
+      if(idx>=0){ items[idx]=ev.upgradeItem.to; next.items=items; }
+    }
+    return next;
+  }
+
+  function perTurnItemEventEffectsText(ev){
+    const p=[];
+    if(ev.money) p.push(ev.money>0?`${ev.money}万円獲得！`:`${Math.abs(ev.money)}万円失った…`);
+    if(ev.setJob) p.push(`職業「${ev.setJob}」になる！`);
+    if(ev.removeRandomItem) p.push(ev._removedItem?`アイテム「${ev._removedItem}」が捨てられた…`:'アイテムが捨てられた…');
+    if(ev.upgradeItem) p.push(`「${ev.upgradeItem.from}」が「${ev.upgradeItem.to}」に進化！`);
+    return p.join('\n');
+  }
+
+  function showPerTurnItemEventOverlay(ev){
+    return new Promise(resolve=>{
+      setEventItemThumb(ev.sourceItem||null);
+      $('event-observer-label').textContent='';
+      $('event-name-text').textContent=ev.name||'';
+      $('event-effect-text').textContent=perTurnItemEventEffectsText(ev);
+      $('event-overlay').dataset.ptItemEvent='1';
+      $('event-overlay').classList.remove('hidden');
+      window._ptItemEventResolve=resolve;
+    });
+  }
+
+  async function showPerTurnItemEvents(evs){
+    for(const ev of evs) await showPerTurnItemEventOverlay(ev);
   }
 
   function isPandemic(){ return !!playerData.__pandemic; }
@@ -1090,7 +1203,7 @@
     }
   }
   async function showEventOverlay(ev){
-    setEventItemThumb(ev.upgradeItem?.to||ev.item||(ev.nameItem?myName+ev.nameItem:null)||ev.requireItem||null);
+    setEventItemThumb(ev.upgradeItem?.to||ev.item||(ev.items?.[0])||(ev.nameItem?myName+ev.nameItem:null)||ev.requireItem||null);
     $('event-name-text').textContent=substitutePlayerName(ev.name,myName);
     $('event-effect-text').textContent=effectsText(ev);
     $('event-overlay').classList.remove('hidden');
@@ -1107,6 +1220,9 @@
   async function doCommitSave(newSt,newUsedIds){
     newSt=applyItemTransformations(newSt);
     newSt=applyPerTurnEffects(newSt);
+    // アイテム毎ターンイベント（貧〇神・モラえもん等）を収集・適用
+    const ptEvs=collectPerTurnItemEvents(newSt);
+    for(const ev of ptEvs) newSt=applyPerTurnItemEvent(newSt,ev);
     newSt=clampStats(newSt);
     let wasJustHospitalized = false;
     const hospThreshold = (newSt.items||[]).includes('根性') ? -5 : 0;
@@ -1152,6 +1268,7 @@
     drawBoard();
     updateTurnUI();
     requestAnimationFrame(showStatDeltas);
+    if(ptEvs.length>0) await showPerTurnItemEvents(ptEvs);
     if(wasJustHospitalized) await showHospitalizationNotification();
   }
 
@@ -1184,6 +1301,12 @@
   $('btn-event-ok').addEventListener('click',async()=>{
     $('event-overlay').classList.add('hidden');
     setEventItemThumb(null);
+    // アイテム毎ターンイベント
+    if($('event-overlay').dataset.ptItemEvent==='1'){
+      delete $('event-overlay').dataset.ptItemEvent;
+      if(window._ptItemEventResolve){ window._ptItemEventResolve(); window._ptItemEventResolve=null; }
+      return;
+    }
     // Hospitalization notification (post-commit, just dismiss)
     if($('event-overlay').dataset.hospNotif==='1'){
       delete $('event-overlay').dataset.hospNotif;
@@ -1222,6 +1345,7 @@
       return;
     }
     if(ev.item) queueItemAcquisition([ev.item]);
+    if(ev.items) queueItemAcquisition([...ev.items]);
     if(ev.nameItem) queueItemAcquisition([myName+ev.nameItem]);
     await doCommitSave(st,newUsedIds);
   });
@@ -1264,6 +1388,9 @@
     'イーロン・マスクメロン':'linear-gradient(150deg,#b8f0a0 0%,#4caf50 100%)',
     '大選手養成ギプス':     'linear-gradient(150deg,#c0c8d8 0%,#607090 100%)',
     '根性':                 'linear-gradient(150deg,#ff8c42 0%,#c04000 100%)',
+    'ゲーム機':             'linear-gradient(150deg,#7060e0 0%,#3020a0 100%)',
+    '貧〇神':               'linear-gradient(150deg,#a08860 0%,#604820 100%)',
+    'キングボ〇ビー':       'linear-gradient(150deg,#ffd060 0%,#e08800 100%)',
   };
   // 全アイテムの画像パス（拡張子が .png のものは明示的に記載）
   const ITEM_IMG = {
