@@ -109,14 +109,14 @@
     'イーロン・マスクメロン': { desc:'毎ターン50万円獲得\n捨てると200万円獲得',                               perTurn:{money:50},                      onDiscard:{money:200} },
     '大選手養成ギプス': { desc:'毎ターン幸福度-1・健康度-3',                                                    perTurn:{happiness:-1,health:-3} },
     '根性':             { desc:'健康度-5まで入院回避\n入院代が二倍になる' },
-    '男子校の呪い':     { desc:'（効果未定）' },
+    '男子校の呪い':     { desc:'「恋人」ができない', blockItems:['恋人'] },
     '女子校ブランド':   { desc:'（効果未定）' },
-    '悪い友達':         { desc:'（効果未定）' },
+    '悪い友達':         { desc:'毎ターン+5万円', perTurn:{money:5} },
     '黒歴史ノート':     { desc:'（効果未定）' },
-    '恋人':             { desc:'（効果未定）' },
+    '恋人':             { desc:'毎ターン幸福度+6', perTurn:{happiness:6} },
     '金持ち友達':       { desc:'（効果未定）' },
-    'ジーザス・ギプス': { desc:'（効果未定）' },
-    '自転車':           { desc:'（効果未定）' },
+    'ジーザス・ギプス': { desc:'毎ターン幸福度-1・健康度-4', perTurn:{happiness:-1,health:-4} },
+    '自転車':           { desc:'移動時サイコロ+1\n捨てると3万円獲得', diceBonus:1, onDiscard:{money:3} },
   };
 
   const JOBS = {
@@ -696,8 +696,9 @@
   $('btn-roll').addEventListener('click',async()=>{
     if(!isMyTurn||rolling)return;
     rolling=true; $('btn-roll').disabled=true;
-    const roll=Math.floor(Math.random()*6)+1;
     const st=getStats(playerData[myId]);
+    const diceBonus=st.items.reduce((s,i)=>s+(ITEMS[i]?.diceBonus||0),0);
+    const roll=Math.floor(Math.random()*6)+1+diceBonus;
     if(st.hospitalized){
       await saveHospitalRoll(st, roll);
       rolling=false; $('btn-roll').disabled=false;
@@ -847,11 +848,6 @@
       const idx=items.indexOf(ev.removeItem);
       if(idx>=0){ items[idx]=null; next.items=items; }
     }
-    if(ev.upgradeItem){
-      const items=[...(next.items||st.items)];
-      const idx=items.indexOf(ev.upgradeItem.from);
-      if(idx>=0){ items[idx]=ev.upgradeItem.to; next.items=items; }
-    }
     if(ev.itemBonusDelta){
       const bonuses={...(st.itemBonuses||{})};
       for(const [itm,d] of Object.entries(ev.itemBonusDelta)){
@@ -881,13 +877,23 @@
         next.__new_item_slots=[...(st.__new_item_slots||[]),slot];
       } else next._pendingItem=itemName;
     }
-    if(ev.item){
+    // blockItems チェック：所持アイテムがブロックしている場合は取得しない
+    const isBlocked=name=>(next.items||st.items).some(i=>i&&ITEMS[i]?.blockItems?.includes(name));
+    if(ev.item&&!isBlocked(ev.item)){
       const items=[...(next.items||st.items)];
       const slot=items.indexOf(null);
       if(slot>=0){
         items[slot]=ev.item; next.items=items;
         next.__new_item_slots=[...(st.__new_item_slots||[]),slot];
       } else next._pendingItem=ev.item;
+    }
+    if(ev.upgradeItem){
+      const to=ev.upgradeItem.to;
+      if(!isBlocked(to)){
+        const items=[...(next.items||st.items)];
+        const idx=items.indexOf(ev.upgradeItem.from);
+        if(idx>=0){ items[idx]=to; next.items=items; }
+      }
     }
     return next;
   }
@@ -1166,6 +1172,11 @@
     '大選手養成ギプス':       'items/IMG_3685.jpg',
     '根性':                   'items/IMG_3702.jpg',
     '親のセワ':               'items/IMG_3683.jpg',
+    'ジーザス・ギプス':       'items/IMG_3689.jpg',
+    '悪い友達':               'items/IMG_3711.jpg',
+    '恋人':                   'items/IMG_3712.jpg',
+    '自転車':                 'items/IMG_3713.jpg',
+    '男子校の呪い':           'items/IMG_3728.jpg',
   };
   // エッジから連結した白ピクセルのみ除去（内部の白は保持）
   function removeWhiteBg(srcImg){
