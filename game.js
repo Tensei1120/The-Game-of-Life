@@ -1019,15 +1019,7 @@
     return {updatedSelf,infectedOthers};
   }
 
-  function isPandemic(){
-    if(!players||players.length<2) return false;
-    const active=players.filter(p=>{
-      const st=getStats(playerData[p.player_id]);
-      return !st.finished&&!st.eliminated;
-    });
-    if(!active.length) return false;
-    return active.every(p=>(getStats(playerData[p.player_id]).items||[]).some(i=>i&&isBacteriaItem(i)));
-  }
+  function isPandemic(){ return !!playerData.__pandemic; }
 
   async function saveRoll(st,newPos,route,roll=1){
     lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null,eventRequireItem:null};
@@ -1124,6 +1116,13 @@
     const newData={...playerData,[myId]:newSt};
     newData.__used_events=newUsedIds;
     if(lastActionInfo){newData.__last_action={...lastActionInfo};lastActionInfo=null;}
+
+    // ── アイテムフィールド効果：パンデミック判定 ──
+    // 全アクティブプレイヤーが菌アイテムを所持していたらパンデミック発動
+    const activePlayers=players.filter(p=>{ const s=getStats(newData[p.player_id]); return !s.finished&&!s.eliminated; });
+    newData.__pandemic = activePlayers.length>0 &&
+      activePlayers.every(p=>(getStats(newData[p.player_id]).items||[]).some(i=>i&&isBacteriaItem(i)));
+
     const isInactive=p=>{ const s=getStats(newData[p.player_id]); return s.finished||s.eliminated; };
     const inactiveCount=players.filter(isInactive).length;
     if(players.length>1&&inactiveCount>=players.length-1){
