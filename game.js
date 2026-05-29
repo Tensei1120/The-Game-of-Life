@@ -126,6 +126,19 @@
     '俳優': { salary:0, happiness:2, health:1, desc:'給料0万/ターン\n幸福度+2・健康度+1' },
   };
 
+  const UNIVERSITIES = [
+    { name:'Fラン大学生', prob:0.20, tuition:40 },
+    { name:'専門学校生',  prob:0.30, tuition:40 },
+    { name:'普通大学生',  prob:0.30, tuition:40 },
+    { name:'高学歴学生',  prob:0.15, tuition:50 },
+    { name:'医学部生',    prob:0.05, tuition:100 },
+  ];
+  function rollUniversity(){
+    let r=Math.random();
+    for(const u of UNIVERSITIES){ r-=u.prob; if(r<=0) return u; }
+    return UNIVERSITIES[UNIVERSITIES.length-1];
+  }
+
   function isBacteriaItem(name){ return typeof name==='string'&&name.endsWith('菌'); }
 
   function rollStartItems(){
@@ -166,7 +179,7 @@
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
              items:Array(6).fill(null), job:null, route:null, finished:false,
              hospitalized:false, hospitalPos:0, hospitalTurns:0, prevMapPos:0,
-             itemBonuses:{}, jobBonuses:{}, eliminated:false };
+             itemBonuses:{}, jobBonuses:{}, eliminated:false, uni:null, ronin:false };
   }
   function clampStats(st) {
     return { ...st,
@@ -671,8 +684,10 @@
   function renderPlayerStatusCards(activeIdx){
     $('player-status-area').innerHTML=players.map((p,i)=>{
       const st=getStats(playerData[p.player_id]);
-      const routeLabel=st.route==='job'?' 💼就職':st.route==='uni'?' 🎓大学':'';
-      const jobLabel=(st.job||'未定')+routeLabel;
+      const uniIcon=st.uni?'🎓 ':st.route==='uni'?'🎓 ':'💼 ';
+      const jobLabel=st.uni?st.uni
+        :st.route==='uni'?'大学ルート'+(st.ronin?' (浪人中)':'')
+        :(st.job||'未定')+(st.route==='job'?' 就職':'');
       const isMine=p.player_id===myId;
       const bg=item=>ITEM_BG[item]||(isBacteriaItem(item)?'linear-gradient(150deg,#7dba6e 0%,#2e7d32 100%)':'linear-gradient(135deg,#c6d9f6,#deeeff)');
       const itemsHtml=st.items.map(item=>
@@ -686,7 +701,7 @@
           <div class="psc-header">
             <span class="psc-dot" style="background:${p.color}"></span>
             <span class="psc-name">${p.player_name}${p.is_host?' 👑':''}${isMine?' <span class="psc-self">自分</span>':''}</span>
-            ${st.finished?'<span class="psc-goal">🏆ゴール</span>':'<span class="psc-job">💼 '+jobLabel+'</span>'}
+            ${st.finished?'<span class="psc-goal">🏆ゴール</span>':'<span class="psc-job">'+uniIcon+jobLabel+'</span>'}
           </div>
           <div class="psc-stats">
             <span class="psc-stat">💰 <span class="psc-stat-val" data-pid="${p.player_id}" data-stat="money">${st.money<0?'－'+Math.abs(st.money):st.money}万円</span></span>
@@ -703,6 +718,17 @@
     if(!isMyTurn||rolling)return;
     rolling=true; $('btn-roll').disabled=true;
     const st=getStats(playerData[myId]);
+
+    // 浪人中：大学再抽選（サイコロは振らない）
+    if(st.ronin){
+      const u=rollUniversity();
+      const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
+      pendingCommit={newSt:{...st},newUsedIds:usedIds,_isUniAssign:true,_uniResult:u};
+      showUniAssignOverlay(u);
+      rolling=false;
+      return;
+    }
+
     const diceBonus=st.items.reduce((s,i)=>s+(ITEMS[i]?.diceBonus||0),0);
     const roll=Math.floor(Math.random()*6)+1+diceBonus;
     if(st.hospitalized){
@@ -1030,6 +1056,16 @@
     playerData={...playerData,[myId]:newSt};
     drawBoard();
 
+    // 大学ルート到着：振り分け
+    if(newPos===BRANCH_START&&route==='uni'){
+      const u=rollUniversity();
+      const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
+      pendingCommit={newSt,newUsedIds:usedIds,_isUniAssign:true,_uniResult:u};
+      await sleep(350);
+      showUniAssignOverlay(u);
+      return;
+    }
+
     if(!isGoal&&isEventSquare(newPos)){
       const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
       const ev=pickEvent(newPos,usedIds,newSt.items,newSt.job);
@@ -1042,6 +1078,12 @@
       }
     }
     await doCommitSave(newSt,Array.isArray(playerData.__used_events)?playerData.__used_events:[]);
+  }
+
+  function showUniAssignOverlay(u){
+    $('uni-assign-name').textContent=u.name;
+    $('uni-assign-cost').textContent=`入学金 ${u.tuition}万円`;
+    $('uni-assign-overlay').classList.remove('hidden');
   }
 
   function setEventItemThumb(item){
@@ -1112,6 +1154,19 @@
     requestAnimationFrame(showStatDeltas);
     if(wasJustHospitalized) await showHospitalizationNotification();
   }
+
+  $('btn-uni-enroll').addEventListener('click',async()=>{
+    $('uni-assign-overlay').classList.add('hidden');
+    const {newSt,newUsedIds,_uniResult:u}=pendingCommit;
+    const finalSt=clampStats({...newSt,uni:u.name,ronin:false,money:newSt.money-u.tuition});
+    await doCommitSave(finalSt,newUsedIds);
+  });
+  $('btn-uni-ronin').addEventListener('click',async()=>{
+    $('uni-assign-overlay').classList.add('hidden');
+    const {newSt,newUsedIds}=pendingCommit;
+    const finalSt=clampStats({...newSt,ronin:true,money:newSt.money-30,happiness:newSt.happiness-4});
+    await doCommitSave(finalSt,newUsedIds);
+  });
 
   $('btn-route-job').addEventListener('click',async()=>{
     $('route-overlay').classList.add('hidden');
