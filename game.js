@@ -126,6 +126,8 @@
     '俳優': { salary:0, happiness:2, health:1, desc:'給料0万/ターン\n幸福度+2・健康度+1' },
   };
 
+  function isBacteriaItem(name){ return typeof name==='string'&&name.endsWith('菌'); }
+
   function rollStartItems(){
     const r=Math.random();
     if(r<0.50) return ['親のスネ'];
@@ -662,7 +664,7 @@
         }catch(e){}
       };
       loader.onerror=()=>{ if(!loader.src.endsWith('.jpg')) loader.src=`items/${item}.jpg`; };
-      loader.src=ITEM_IMG[item]||`items/${item}.png`;
+      loader.src=getItemImg(item);
     });
   }
 
@@ -672,7 +674,7 @@
       const routeLabel=st.route==='job'?' 💼就職':st.route==='uni'?' 🎓大学':'';
       const jobLabel=(st.job||'未定')+routeLabel;
       const isMine=p.player_id===myId;
-      const bg=item=>ITEM_BG[item]||'linear-gradient(135deg,#c6d9f6,#deeeff)';
+      const bg=item=>ITEM_BG[item]||(isBacteriaItem(item)?'linear-gradient(150deg,#7dba6e 0%,#2e7d32 100%)':'linear-gradient(135deg,#c6d9f6,#deeeff)');
       const itemsHtml=st.items.map(item=>
         item?`<div class="item-slot filled" data-item="${item}" style="background:${bg(item)}">
                 <img class="item-slot-img" src="" data-item-img="${item}" alt="${item}">
@@ -733,6 +735,7 @@
   }
   function canDiscard(item,st){
     if(!item) return true;
+    if(isBacteriaItem(item)) return false;
     const def=ITEMS[item]; if(!def) return true;
     if(def.undiscardable) return false;
     if(def.undiscardableUntil!==undefined&&st.pos<def.undiscardableUntil) return false;
@@ -757,7 +760,7 @@
     let money=st.money,happiness=st.happiness,health=st.health;
     for(let i=0;i<st.items.length;i++){
       const item=st.items[i]; if(!item) continue;
-      const pt=ITEMS[item]?.perTurn;
+      const pt=ITEMS[item]?.perTurn||(isBacteriaItem(item)?{health:-3,happiness:-1}:null);
       if(pt){
         if(pt.money)     money     +=pt.money;
         if(pt.happiness) happiness +=pt.happiness;
@@ -960,6 +963,46 @@
     }
   }
 
+  function infectSt(st, bacteriaName){
+    if((st.items||[]).includes(bacteriaName)) return st;
+    const items=[...(st.items||[])];
+    const slot=items.indexOf(null);
+    if(slot>=0){ items[slot]=bacteriaName; return {...st,items}; }
+    return st;
+  }
+
+  function checkInfections(fromPos, toPos, movingSt){
+    const myBacteria=(movingSt.items||[]).filter(i=>i&&isBacteriaItem(i));
+    let updatedSelf=movingSt;
+    const infectedOthers={};
+    for(let pos=fromPos+1;pos<=toPos;pos++){
+      for(const p of players){
+        if(p.player_id===myId) continue;
+        const otherSt=getStats(playerData[p.player_id]);
+        if(otherSt.finished||otherSt.eliminated||otherSt.hospitalized) continue;
+        if(otherSt.pos!==pos) continue;
+        // spread my bacteria to other player
+        let cur=infectedOthers[p.player_id]||otherSt;
+        for(const b of myBacteria) cur=infectSt(cur,b);
+        infectedOthers[p.player_id]=cur;
+        // spread other player's bacteria to me
+        const theirBacteria=(otherSt.items||[]).filter(i=>i&&isBacteriaItem(i));
+        for(const b of theirBacteria) updatedSelf=infectSt(updatedSelf,b);
+      }
+    }
+    return {updatedSelf,infectedOthers};
+  }
+
+  function isPandemic(){
+    if(!players||players.length<2) return false;
+    const active=players.filter(p=>{
+      const st=getStats(playerData[p.player_id]);
+      return !st.finished&&!st.eliminated;
+    });
+    if(!active.length) return false;
+    return active.every(p=>(getStats(playerData[p.player_id]).items||[]).some(i=>i&&isBacteriaItem(i)));
+  }
+
   async function saveRoll(st,newPos,route,roll=1){
     lastActionInfo={pid:myId,route:route||null,roll,eventName:null,eventEffect:null,eventRequireItem:null};
     // observer に即時通知（DB 更新より大幅に速い）
@@ -973,9 +1016,17 @@
     await animateMove(st, newPos, route);
     await arrivalAnimation(newPos, route);
 
-    const newSt=clampStats({...st, pos:newPos,
+    let newSt=clampStats({...st, pos:newPos,
       route:isGoal?null:(route||null),
       finished:isGoal||!!st.finished});
+
+    // 感染チェック：移動経路上で他プレイヤーと接触した場合に菌を伝播
+    const {updatedSelf,infectedOthers}=checkInfections(st.pos,newPos,newSt);
+    newSt=updatedSelf;
+    for(const [pid,infSt] of Object.entries(infectedOthers)){
+      playerData={...playerData,[pid]:infSt};
+    }
+
     playerData={...playerData,[myId]:newSt};
     drawBoard();
 
@@ -995,16 +1046,16 @@
 
   function setEventItemThumb(item){
     const wrap=$('event-item-thumb-wrap');
-    if(item&&ITEM_IMG[item]){
-      const img=$('event-item-thumb');
-      img.src=ITEM_IMG[item];
+    const src=getItemImg(item);
+    if(item&&src){
+      $('event-item-thumb').src=src;
       wrap.classList.remove('hidden');
     } else {
       wrap.classList.add('hidden');
     }
   }
   async function showEventOverlay(ev){
-    setEventItemThumb(ev.upgradeItem?.to||ev.item||ev.requireItem||null);
+    setEventItemThumb(ev.upgradeItem?.to||ev.item||(ev.nameItem?myName+ev.nameItem:null)||ev.requireItem||null);
     $('event-name-text').textContent=substitutePlayerName(ev.name,myName);
     $('event-effect-text').textContent=effectsText(ev);
     $('event-overlay').classList.remove('hidden');
@@ -1116,6 +1167,7 @@
       return;
     }
     if(ev.item) queueItemAcquisition([ev.item]);
+    if(ev.nameItem) queueItemAcquisition([myName+ev.nameItem]);
     await doCommitSave(st,newUsedIds);
   });
 
@@ -1183,6 +1235,12 @@
     '黒歴史ノート':           'items/IMG_3730.jpg',
     '金持ち友達':             'items/IMG_3731.jpg',
   };
+  function getItemImg(item){
+    if(!item) return null;
+    if(ITEM_IMG[item]) return ITEM_IMG[item];
+    if(isBacteriaItem(item)) return 'items/IMG_3671.jpg';
+    return `items/${item}.png`;
+  }
   // エッジから連結した白ピクセルのみ除去（内部の白は保持）
   function removeWhiteBg(srcImg){
     const cv=document.createElement('canvas');
@@ -1226,12 +1284,13 @@
   }
 
   function showItemCard(item,acquired=false){
-    const def=ITEMS[item]; if(!def&&!acquired) return;
+    const def=ITEMS[item];
+    if(!def&&!acquired&&!isBacteriaItem(item)) return;
     $('item-card-name').textContent=item;
-    $('item-card-desc').textContent=def?.desc||'';
+    $('item-card-desc').textContent=def?.desc||(isBacteriaItem(item)?'毎ターン健康度-3・幸福度-1\n捨てられない':'');
     $('item-card-banner-name').textContent=item;
     const wrap=document.querySelector('.item-card-img-wrap');
-    if(wrap) wrap.style.background=ITEM_BG[item]||'linear-gradient(150deg,#c6d9f6 0%,#deeeff 100%)';
+    if(wrap) wrap.style.background=ITEM_BG[item]||(isBacteriaItem(item)?'linear-gradient(150deg,#7dba6e 0%,#2e7d32 100%)':'linear-gradient(150deg,#c6d9f6 0%,#deeeff 100%)');
     const img=$('item-card-img');
     img.classList.add('hidden');
     const loader=new Image();
@@ -1240,7 +1299,7 @@
       img.classList.remove('hidden');
     };
     loader.onerror=()=>{ if(!loader.src.endsWith('.jpg')) loader.src=`items/${item}.jpg`; };
-    loader.src=ITEM_IMG[item]||`items/${item}.png`;
+    loader.src=getItemImg(item);
     const overlay=$('item-card-overlay');
     acquired ? overlay.classList.add('acquire') : overlay.classList.remove('acquire');
     overlay.classList.remove('hidden');
@@ -1340,6 +1399,21 @@
     branchSquares.uni.forEach(sq=>drawBranchSquare(sq));
     drawBranchLabels();
     drawTokens();
+    if(isPandemic()) drawPandemicOverlay();
+  }
+
+  function drawPandemicOverlay(){
+    ctx.save();
+    ctx.fillStyle='rgba(160,0,0,0.12)';
+    ctx.fillRect(0,0,CW,CH);
+    ctx.font='bold 68px Segoe UI';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.shadowColor='rgba(255,0,0,0.7)';
+    ctx.shadowBlur=28;
+    ctx.fillStyle='rgba(204,16,16,0.9)';
+    ctx.fillText('🦠 パンデミック', CW/2, 58);
+    ctx.restore();
   }
 
   function tileGradHosp(n, corners){
@@ -1840,7 +1914,7 @@
       };
       loader.onerror=()=>{ if(!loader.src.endsWith('.jpg')){ loader.src=`items/${item}.jpg`; }else{ img.classList.add('hidden'); } };
       img.classList.add('hidden');
-      loader.src=ITEM_IMG[item]||`items/${item}.png`;
+      loader.src=getItemImg(item);
     });
     overlay.classList.remove('hidden');
   }
