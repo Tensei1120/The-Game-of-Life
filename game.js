@@ -826,8 +826,10 @@
   }
   function applyPerTurnEffects(st){
     let money=st.money,happiness=st.happiness,health=st.health;
+    const newItems=st.__newItems||[];
     for(let i=0;i<st.items.length;i++){
       const item=st.items[i]; if(!item) continue;
+      if(newItems.includes(item)) continue; // 入手したターンはスキップ
       const pt=ITEMS[item]?.perTurn||(isBacteriaItem(item)?{health:-3,happiness:-1}:null);
       if(pt){
         if(pt.money)     money     +=pt.money;
@@ -953,6 +955,7 @@
       if(slot>=0){
         items[slot]=itemName; next.items=items;
         next.__new_item_slots=[...(st.__new_item_slots||[]),slot];
+        next.__newItems=[...(next.__newItems||st.__newItems||[]),itemName];
       } else if(!allUndiscardable(items,{...next})) next._pendingItem=itemName;
     }
     if(ev.items){
@@ -962,6 +965,7 @@
         if(slot>=0){
           items[slot]=evItem; next.items=items;
           next.__new_item_slots=[...(next.__new_item_slots||st.__new_item_slots||[]),slot];
+          next.__newItems=[...(next.__newItems||st.__newItems||[]),evItem];
         } else if(!allUndiscardable(items,{...next})){ next._pendingItem=evItem; break; }
       }
     }
@@ -971,6 +975,7 @@
       if(slot>=0){
         items[slot]=ev.item; next.items=items;
         next.__new_item_slots=[...(st.__new_item_slots||[]),slot];
+        next.__newItems=[...(next.__newItems||st.__newItems||[]),ev.item];
       } else if(!allUndiscardable(items,{...next})) next._pendingItem=ev.item;
     }
     if(ev.upgradeItem){
@@ -1046,7 +1051,11 @@
     if((st.items||[]).includes(bacteriaName)) return st;
     const items=[...(st.items||[])];
     const slot=items.indexOf(null);
-    if(slot>=0){ items[slot]=bacteriaName; return {...st,items}; }
+    if(slot>=0){
+      items[slot]=bacteriaName;
+      const newItems=[...(st.__newItems||[]),bacteriaName];
+      return {...st,items,__newItems:newItems};
+    }
     return st;
   }
 
@@ -1077,13 +1086,13 @@
           if(selfHas&&!otherHas){
             const slot=(cur.items||[]).indexOf(null);
             if(slot>=0){
-              const oi=[...cur.items]; oi[slot]=ti; cur={...cur,items:oi};
+              const oi=[...cur.items]; oi[slot]=ti; cur={...cur,items:oi,__newItems:[...(cur.__newItems||[]),ti]};
               const si=[...updatedSelf.items]; si[si.indexOf(ti)]=null; updatedSelf={...updatedSelf,items:si};
             }
           } else if(otherHas&&!selfHas){
             const slot=(updatedSelf.items||[]).indexOf(null);
             if(slot>=0){
-              const si=[...updatedSelf.items]; si[slot]=ti; updatedSelf={...updatedSelf,items:si};
+              const si=[...updatedSelf.items]; si[slot]=ti; updatedSelf={...updatedSelf,items:si,__newItems:[...(updatedSelf.__newItems||[]),ti]};
               const oi=[...cur.items]; oi[oi.indexOf(ti)]=null; cur={...cur,items:oi};
             }
           }
@@ -1098,8 +1107,10 @@
   // ── アイテム毎ターンイベントシステム ──
   function collectPerTurnItemEvents(st){
     const evs=[];
+    const newItems=st.__newItems||[];
     for(const item of (st.items||[])){
       if(!item) continue;
+      if(newItems.includes(item)) continue; // 入手したターンはスキップ
       const fn=ITEMS[item]?.perTurnEvents;
       if(typeof fn==='function'){ const r=fn(st); if(r) evs.push(...r); }
     }
@@ -1270,7 +1281,7 @@
       if(ev.triggerFieldEffect) fieldEffectChange=ev.triggerFieldEffect;
       if(ev.endFieldEffect)     fieldEffectChange='none';
     }
-    newSt=clampStats(newSt);
+    newSt=clampStats({...newSt,__newItems:[]}); // 次ターンから効果発動
     let wasJustHospitalized = false;
     const hospThreshold = (newSt.items||[]).includes('根性') ? -5 : 0;
     if(newSt.health<=hospThreshold && !newSt.hospitalized && !newSt.finished){
