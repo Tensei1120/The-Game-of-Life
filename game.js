@@ -95,6 +95,34 @@
     { id:47, minPos:11, maxPos:19, requireItem:'親のスネ', name:'「家族旅行もこれで最後かしらね…」と言う母の瞳に寂しさが映る。', happiness:2 },
     { id:48, minPos:11, maxPos:19, requireItem:'親のスネ', name:'バイトした！！', money:2 },
     { id:49, minPos:11, maxPos:19, requireItems:['親のスネ','友達'], name:'ディ〇ニーリゾートに宿泊した！', money:-10, happiness:3 },
+
+    // ═══════════ 21〜29マス（大学ルート）═══════════
+    // ── 共通（大学ルート全員） ──
+    { id:58, minPos:21, maxPos:29, requireRoute:'uni', name:'サークルの合宿に参加した', money:-10, happiness:2 },
+    { id:59, minPos:21, maxPos:29, requireRoute:'uni', name:'バイト掛け持ちしまくった！', money:6, health:-3 },
+    { id:60, minPos:21, maxPos:29, requireRoute:'uni', name:'先輩に酒飲ませれた…', item:'酒', happiness:2, health:-3 },
+    { id:61, minPos:21, maxPos:29, requireRoute:'uni', name:'タバコを吸ってみた！', item:'タバコ', happiness:2, health:-3 },
+    { id:62, minPos:21, maxPos:29, requireRoute:'uni', name:'浅い友達がたくさんできた！', item:'友達' },
+    { id:63, minPos:21, maxPos:29, requireRoute:'uni', name:'パチンコにハマる', item:'パチンコ' },
+    { id:64, minPos:21, maxPos:29, requireRoute:'uni', requireNotItem:'好きな人', name:'君から見た僕はきっとただの友達の友達。たかが知人Bに向けられた笑顔があれならもう恐ろしい人だ。', item:'好きな人' },
+    { id:65, minPos:21, maxPos:29, requireRoute:'uni', name:'ウェイウェイウェイウェウェイウェイウェウェイウェ、ずっと騒いでる！', happiness:5 },
+    { id:66, minPos:21, maxPos:29, requireRoute:'uni', name:'「どしたん、話聞こうか？」', item:'キモ男' },
+    { id:67, minPos:21, maxPos:29, requireRoute:'uni', name:'ジムに通い始めた！', item:'ジム' },
+    // ── 専門学校生 限定 ──
+    { id:68, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'専門学校生', name:'実習ミスってさすがに心折れた', happiness:-3 },
+    { id:69, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'専門学校生', name:'インターン先でそのまま採用された', setPos:30 },
+    // ── 高学歴学生 限定 ──
+    { id:70, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'高学歴学生', name:'留学にいった！', money:-20, item:'留学経験' },
+    { id:71, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'高学歴学生', name:'インターンに参加する', money:8 },
+    { id:72, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'高学歴学生', name:'周りが意識高すぎて話が合わない', happiness:-3 },
+    { id:73, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'高学歴学生', name:'学歴厨youtuberに遭遇した', happiness:2 },
+    // ── Fラン大学生 限定 ──
+    { id:74, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'Fラン大学生', name:'留年した！笑', money:-10, setPos:21 },
+    { id:75, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'Fラン大学生', name:'大切なものは単位より、遊びと睡眠！', happiness:4, health:4 },
+    { id:76, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'Fラン大学生', name:'学歴厨youtuberに馬鹿にされた！笑', happiness:-3 },
+    // ── 医学部生 限定 ──
+    { id:77, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'医学部生', name:'"休む"って、なんだっけ。', happiness:-3, health:-5 },
+    { id:78, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'医学部生', name:'医学部で司法試験も会計士試験も受かったやつがいるらしい。は？', happiness:-5 },
   ];
 
   const ITEMS = {
@@ -160,6 +188,29 @@
       }
     },
     'デビル':           { desc:'毎ターン−5万円・幸福度−1・健康度−1\n捨てられない', undiscardable:true, perTurn:{money:-5,happiness:-1,health:-1} },
+    '酒':              { desc:'毎ターン幸福+5・健康-2\n10%でアルチュウに進化', perTurn:{happiness:5,health:-2},
+      perTurnEvents(st){
+        if(Math.random()<0.10) return [{sourceItem:'酒',name:'「酒」は「アルチュウ」に進化した！',upgradeItem:{from:'酒',to:'アルチュウ'}}];
+        return null;
+      }
+    },
+    'アルチュウ':       { desc:'捨てられない\n毎ターン健康-6', undiscardable:true, perTurn:{health:-6} },
+    'タバコ':           { desc:'毎ターン幸福+6・健康-3\n10%でニコチュウに進化', perTurn:{happiness:6,health:-3},
+      perTurnEvents(st){
+        if(Math.random()<0.10) return [{sourceItem:'タバコ',name:'「タバコ」は「ニコチュウ」に進化した！',upgradeItem:{from:'タバコ',to:'ニコチュウ'}}];
+        return null;
+      }
+    },
+    'ニコチュウ':       { desc:'捨てられない\n毎ターン健康-8', undiscardable:true, perTurn:{health:-8} },
+    'パチンコ':         { desc:'毎ターン幸福+1\nランダム-6〜+5万円', perTurn:{happiness:1},
+      perTurnEvents(st){
+        const money=Math.floor(Math.random()*12)-6;
+        return [{sourceItem:'パチンコ',name:money>=0?'パチンコで勝った！！':'パチンコで負けた…',money}];
+      }
+    },
+    'キモ男':           { desc:'毎ターン幸福-2', perTurn:{happiness:-2} },
+    'ジム':             { desc:'毎ターン-2万・健康+5', perTurn:{money:-2,health:5} },
+    '留学経験':         { desc:'留学経験あり' },
   };
 
   const JOBS = {
@@ -855,7 +906,7 @@
   function isEventSquare(pos){
     return pos>0&&pos<100&&!FORCED_STOPS.includes(pos);
   }
-  function pickEvent(pos,usedIds,items=[],job=null){
+  function pickEvent(pos,usedIds,items=[],job=null,route=null,uni=null){
     const hasItems=items.some(i=>i);
     const av=EVENTS.filter(e=>{
       if(pos<e.minPos||pos>e.maxPos||usedIds.includes(e.id)) return false;
@@ -863,16 +914,23 @@
       if(e.requireItems&&!e.requireItems.every(i=>items.includes(i))) return false;
       if(e.requireNotItem&&items.includes(e.requireNotItem)) return false;
       if(e.requireJob&&e.requireJob!==job) return false;
+      if(e.requireRoute&&e.requireRoute!==route) return false;
+      if(e.requireUni&&e.requireUni!==uni) return false;
       return true;
     });
     const special = av.filter(e=>e.special);
+    const uniEvs  = av.filter(e=>!e.special&&!e.requireJob&&e.requireUni);
     const jobEvs  = av.filter(e=>!e.special&&e.requireJob);
-    const itemEvs = av.filter(e=>!e.special&&!e.requireJob&&(e.requireItem||e.requireItems));
-    const general = av.filter(e=>!e.special&&!e.requireJob&&!e.requireItem&&!e.requireItems);
+    const itemEvs = av.filter(e=>!e.special&&!e.requireJob&&!e.requireUni&&(e.requireItem||e.requireItems));
+    const general = av.filter(e=>!e.special&&!e.requireJob&&!e.requireUni&&!e.requireItem&&!e.requireItems);
 
     // 確率テーブル（空バケットは除外して正規化）
+    // 大学限定あり：共通30%/アイテム20%/大学限定40%/スペシャル10%
     let buckets;
-    if(job && hasItems)     buckets=[{p:general,w:30},{p:itemEvs,w:30},{p:jobEvs,w:30},{p:special,w:10}];
+    const hasUni=uniEvs.length>0;
+    if(hasUni && hasItems)  buckets=[{p:general,w:30},{p:itemEvs,w:20},{p:uniEvs,w:40},{p:special,w:10}];
+    else if(hasUni)         buckets=[{p:general,w:45},{p:uniEvs,w:45},{p:special,w:10}];
+    else if(job && hasItems) buckets=[{p:general,w:30},{p:itemEvs,w:30},{p:jobEvs,w:30},{p:special,w:10}];
     else if(job)            buckets=[{p:general,w:45},{p:jobEvs,w:45},{p:special,w:10}];
     else if(hasItems)       buckets=[{p:general,w:50},{p:itemEvs,w:40},{p:special,w:10}];
     else                    buckets=[{p:general,w:90},{p:special,w:10}];
@@ -890,7 +948,8 @@
   }
   function effectsText(ev){
     const p=[];
-    if(ev.eliminate)   p.push('脱落…観戦者になる。');
+    if(ev.eliminate)         p.push('脱落…観戦者になる。');
+    if(ev.setPos!==undefined) p.push(`${ev.setPos}マスへ移動！`);
     if(ev.upgradeItem) p.push(`「${ev.upgradeItem.from}」が「${ev.upgradeItem.to}」に進化！`);
     if(ev.item)        p.push(`アイテム「${ev.item}」を獲得！`);
     if(ev.removeItem)  p.push(`アイテム「${ev.removeItem}」を失った…`);
@@ -918,7 +977,8 @@
   }
   function applyEventToStats(st,ev){
     const next={...st};
-    if(ev.eliminate)   next.eliminated=true;
+    if(ev.eliminate)          next.eliminated=true;
+    if(ev.setPos!==undefined) next.pos=ev.setPos;
     if(ev.money)     next.money=st.money+ev.money;
     if(ev.happiness) next.happiness=st.happiness+ev.happiness;
     if(ev.health)    next.health=st.health+ev.health;
@@ -1227,7 +1287,7 @@
 
     if(!isGoal&&isEventSquare(newPos)){
       const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
-      const ev=pickEvent(newPos,usedIds,newSt.items,newSt.job);
+      const ev=pickEvent(newPos,usedIds,newSt.items,newSt.job,newSt.route,newSt.uni);
       if(ev){
         // イベント内容を observer に broadcast
         pendingCommit={newSt,newUsedIds:[...usedIds,ev.id],ev};
