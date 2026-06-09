@@ -53,7 +53,7 @@
     { id:24, minPos:1, maxPos:10, requireItem:'貧困家庭', name:'泣き腫らした目で、一般家庭を睨んだ。', happiness:-3, item:'根性' },
     { id:50, minPos:1, maxPos:10, name:'あの頃みたいな友達は、もうできない。', item:'友達' },
     { id:51, minPos:1, maxPos:10, special:true, name:'「（プレイヤー名）菌だ！」と言われ、逃げ回られる。', happiness:-2, nameItem:'菌' },
-    { id:55, minPos:1, maxPos:10, special:true, name:'クリボーに当たって死んだ！', eliminate:true },
+    { id:55, minPos:1, maxPos:1, special:true, forcedProb:0.40, name:'クリボーに当たって死んだ！', eliminate:true },
     { id:56, minPos:1, maxPos:10, special:true, name:'未来からモラえもんがやってきた！', item:'モラえもん' },
     { id:57, minPos:1, maxPos:70, special:true, requireNotItem:'教育ママ', name:'大人気ゲームを購入！', money:-2, happiness:3, items:['ゲーム機','貧〇神'] },
     // ── 親のスネ 限定 ──
@@ -918,11 +918,16 @@
       if(e.requireUni&&e.requireUni!==uni) return false;
       return true;
     });
-    const special = av.filter(e=>e.special);
-    const uniEvs  = av.filter(e=>!e.special&&!e.requireJob&&e.requireUni);
-    const jobEvs  = av.filter(e=>!e.special&&e.requireJob);
-    const itemEvs = av.filter(e=>!e.special&&!e.requireJob&&!e.requireUni&&(e.requireItem||e.requireItems));
-    const general = av.filter(e=>!e.special&&!e.requireJob&&!e.requireUni&&!e.requireItem&&!e.requireItems);
+    // forcedProb：バケット選択より先に確率チェックして即時発動
+    for(const e of av.filter(e=>e.forcedProb)){
+      if(Math.random()<e.forcedProb) return e;
+    }
+    const avNormal=av.filter(e=>!e.forcedProb);
+    const special = avNormal.filter(e=>e.special);
+    const uniEvs  = avNormal.filter(e=>!e.special&&!e.requireJob&&e.requireUni);
+    const jobEvs  = avNormal.filter(e=>!e.special&&e.requireJob);
+    const itemEvs = avNormal.filter(e=>!e.special&&!e.requireJob&&!e.requireUni&&(e.requireItem||e.requireItems));
+    const general = avNormal.filter(e=>!e.special&&!e.requireJob&&!e.requireUni&&!e.requireItem&&!e.requireItems);
 
     // 確率テーブル（空バケットは除外して正規化）
     // 大学限定あり：共通30%/アイテム20%/大学限定40%/スペシャル10%
