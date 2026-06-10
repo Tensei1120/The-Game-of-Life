@@ -1191,8 +1191,15 @@
     if(ev.giveItem){
       const items=[...(next.items||st.items)];
       const slot=items.indexOf(null);
-      if(slot>=0){ items[slot]=ev.giveItem; next.items=items; }
-      // 全スロット捨てられない場合は自動破棄（何もしない）
+      if(slot>=0){
+        items[slot]=ev.giveItem; next.items=items;
+      } else if(!canDiscard(ev.giveItem,next)){
+        // 捨てられない新アイテム：捨てられる既存アイテムを強制的に追い出す
+        const replaceIdx=items.findIndex(i=>i&&canDiscard(i,next));
+        if(replaceIdx>=0){ items[replaceIdx]=ev.giveItem; next.items=items; }
+        // 全スロット捨てられない場合のみ自動破棄
+      }
+      // 捨てられる新アイテムで満杯の場合は自動破棄（何もしない）
     }
     if(ev.removeRandomItem){
       const candidates=(st.items||[]).map((i,idx)=>({i,idx})).filter(({i})=>i&&!TRANSFER_ITEMS.includes(i)&&i!=='貧〇神');
@@ -1329,7 +1336,7 @@
   function showDiscardOverlay(currentItems,newItem){
     const st=getStats(playerData[myId]);
     $('discard-items').innerHTML=[...currentItems,newItem].map((item,i)=>{
-      const locked=i<6&&!canDiscard(item,st);
+      const locked=!canDiscard(item,st); // 新アイテムも含め捨てられないものはロック
       return `<button class="discard-btn${locked?' locked':''}" data-idx="${i}" ${locked?'disabled':''}>${item}${locked?' 🔒':''}</button>`;
     }).join('');
     $('discard-overlay').classList.remove('hidden');
