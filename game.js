@@ -1548,6 +1548,10 @@
     '女子校ブランド':         'items/IMG_3729.jpg',
     '黒歴史ノート':           'items/IMG_3730.jpg',
     '金持ち友達':             'items/IMG_3731.jpg',
+    '貧〇神':                 'items/IMG_3665.jpg',
+    'キングボ〇ビー':         'items/IMG_3666.jpg',
+    'デット・エンド':         'items/IMG_3677.jpg',
+    'モラえもん':             'items/IMG_3732.jpg',
   };
   function getItemImg(item){
     if(!item) return null;
