@@ -351,6 +351,37 @@ body {
 #btn-uni-ronin:hover { transform: translateY(-2px); }
 .uni-ronin-sub { font-size: .75rem; font-weight: 400; opacity: .9; }
 
+/* 就職振り分けオーバーレイ */
+#job-assign-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(20,10,0,.82); z-index: 200; animation: fadeInOverlay .3s ease;
+}
+#job-assign-overlay.hidden { display: none; }
+.job-assign-box {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  background: #fff; border-radius: 24px; padding: 36px 44px; text-align: center;
+  box-shadow: 0 16px 48px rgba(0,0,0,.4); max-width: 400px; width: 90%;
+}
+.job-assign-icon { font-size: 2.8rem; margin: 0; }
+.job-assign-title { font-size: 1.25rem; font-weight: 800; color: #2a1800; margin: 0; }
+.job-assign-name { font-size: 1.6rem; font-weight: 900; color: #7a3000; margin: 4px 0; }
+.job-assign-desc { font-size: .9rem; color: #555; white-space: pre-line; margin: 0; }
+.job-assign-buttons { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; width: 100%; margin-top: 6px; }
+#btn-job-accept {
+  flex: 1; min-width: 130px; padding: 14px 16px; font-size: .95rem; font-weight: 700;
+  border: none; border-radius: 12px;
+  background: linear-gradient(135deg,#e07030,#a04010); color: #fff;
+  cursor: pointer; transition: all .2s; box-shadow: 0 4px 16px rgba(180,80,0,.35);
+}
+#btn-job-accept:hover { transform: translateY(-2px); }
+#btn-job-reject {
+  flex: 1; min-width: 130px; padding: 14px 16px; font-size: .9rem; font-weight: 700;
+  border: none; border-radius: 12px;
+  background: linear-gradient(135deg,#a0a0b0,#606080); color: #fff;
+  cursor: pointer; transition: all .2s; box-shadow: 0 4px 16px rgba(80,80,120,.3);
+}
+#btn-job-reject:hover { transform: translateY(-2px); }
+
 /* ゴールバッジ */
 .psc-goal {
   font-size: .7rem; font-weight: 700; padding: 2px 7px;
