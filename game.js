@@ -1194,10 +1194,10 @@
       if(slot>=0){
         items[slot]=ev.giveItem; next.items=items;
       } else if(!canDiscard(ev.giveItem,next)){
-        // 捨てられない新アイテム：捨てられる既存アイテムを強制的に追い出す
-        const replaceIdx=items.findIndex(i=>i&&canDiscard(i,next));
-        if(replaceIdx>=0){ items[replaceIdx]=ev.giveItem; next.items=items; }
-        // 全スロット捨てられない場合のみ自動破棄
+        // 捨てられない新アイテム：捨てられる既存アイテムがあればプレイヤーに選択させる
+        const hasDiscardable=items.some(i=>i&&canDiscard(i,next));
+        if(hasDiscardable) next._pendingGiveItem=ev.giveItem;
+        // 全スロット捨てられない場合は自動破棄
       }
       // 捨てられる新アイテムで満杯の場合は自動破棄（何もしない）
     }
@@ -1353,7 +1353,9 @@
       if(ev.triggerFieldEffect) fieldEffectChange=ev.triggerFieldEffect;
       if(ev.endFieldEffect)     fieldEffectChange='none';
     }
-    newSt=clampStats({...newSt,__newItems:[]}); // 次ターンから効果発動
+    // 捨てられないアイテムの付与待ちを回収してからstatsをクリーン化
+    const pendingGiveItem=newSt._pendingGiveItem||null;
+    newSt=clampStats({...newSt,__newItems:[],_pendingGiveItem:undefined}); // 次ターンから効果発動
     let wasJustHospitalized = false;
     const hospThreshold = (newSt.items||[]).includes('根性') ? -5 : 0;
     if(newSt.health<=hospThreshold && !newSt.hospitalized && !newSt.finished){
@@ -1407,6 +1409,16 @@
     requestAnimationFrame(showStatDeltas);
     if(ptEvs.length>0) await showPerTurnItemEvents(ptEvs);
     if(wasJustHospitalized) await showHospitalizationNotification();
+    // 毎ターンイベントで受け取った捨てられないアイテム：捨てるアイテムをプレイヤーに選ばせる
+    if(pendingGiveItem) await showPostPtEvDiscard(pendingGiveItem);
+  }
+
+  function showPostPtEvDiscard(item){
+    return new Promise(resolve=>{
+      const currentSt=getStats(playerData[myId]);
+      pendingCommit={_isPostPtGive:true,giveItem:item,_resolve:resolve};
+      showDiscardOverlay(currentSt.items,item);
+    });
   }
 
   $('btn-uni-enroll').addEventListener('click',async()=>{
@@ -1492,6 +1504,27 @@
     if(!btn)return;
     $('discard-overlay').classList.add('hidden');
     const idx=parseInt(btn.dataset.idx);
+
+    // 毎ターンイベント由来の捨てられないアイテム：DB直接更新のみ（doCommitSave再呼び不要）
+    if(pendingCommit._isPostPtGive){
+      const {giveItem,_resolve}=pendingCommit; pendingCommit={};
+      if(idx<6){
+        let st={...getStats(playerData[myId]),items:[...getStats(playerData[myId]).items]};
+        const discarded=st.items[idx];
+        const onDiscard=ITEMS[discarded]?.onDiscard;
+        if(onDiscard?.money) st.money=(st.money||0)+onDiscard.money;
+        st.items[idx]=giveItem;
+        st.__new_item_slots=[...(st.__new_item_slots||[]),idx];
+        const newData={...playerData,[myId]:st};
+        await sb.from('rooms').update({alive_cells:newData}).eq('id',roomId);
+        playerData=newData;
+        drawBoard();
+        queueItemAcquisition([giveItem]);
+      }
+      if(_resolve) _resolve();
+      return;
+    }
+
     const {newSt,newUsedIds,pendingItem}=pendingCommit;
     let st={...newSt,items:[...newSt.items]};
     if(idx<6){
