@@ -214,8 +214,30 @@
   };
 
   const JOBS = {
-    '俳優': { salary:0, happiness:2, health:1, desc:'給料0万/ターン\n幸福度+2・健康度+1' },
-    'ニート': { salary:0, happiness:0, health:0, desc:'（効果未定）' },
+    '俳優':         { salary:0,  happiness:2,  health:1,  desc:'給料0万/ターン\n幸福度+2・健康度+1' },
+    'ニート':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '会社員':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'スポーツ選手': { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '起業家':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '配信者':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'フリーター':   { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '警察学校':     { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'ヤクザ':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '大工':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'ギャンブラー': { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'アイドル':     { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '詐欺師':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '料理人':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'ナイトワーカー':{ salary:0, happiness:0,  health:0,  desc:'（効果未定）' },
+    '農家':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '革命家':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'コメディアン': { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '宗教家':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '海賊':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'ラッパー':     { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '自衛隊員':     { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'ピアニスト':   { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '死神':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
   };
 
   const UNIVERSITIES = [
@@ -230,6 +252,40 @@
     let r=Math.random();
     for(const u of UNIVERSITIES){ r-=(hasJuku?u.probJuku:u.prob); if(r<=0) return u; }
     return UNIVERSITIES[UNIVERSITIES.length-1];
+  }
+
+  const JOBS_POOL = [
+    { name:'会社員',     weight:20 },
+    { name:'スポーツ選手', weight:30, requireItem:'グローブ' },
+    { name:'起業家',     weight:5 },
+    { name:'配信者',     weight:3 },
+    { name:'俳優',       weight:4 },
+    { name:'フリーター', weight:10 },
+    { name:'警察学校',   weight:5 },
+    { name:'ヤクザ',     weight:2 },
+    { name:'大工',       weight:5 },
+    { name:'ギャンブラー', weight:1 },
+    { name:'アイドル',   weight:3 },
+    { name:'詐欺師',     weight:2 },
+    { name:'料理人',     weight:5 },
+    { name:'ナイトワーカー', weight:1 },
+    { name:'農家',       weight:10 },
+    { name:'革命家',     weight:1 },
+    { name:'コメディアン', weight:3 },
+    { name:'宗教家',     weight:1 },
+    { name:'海賊',       weight:1 },
+    { name:'ラッパー',   weight:3 },
+    { name:'自衛隊員',   weight:5 },
+    { name:'ニート',     weight:10 },
+    { name:'ピアニスト', weight:30, requireItem:'ピアノ' },
+    { name:'死神',       weight:30, requireItem:'黒歴史ノート' },
+  ];
+  function rollJob(items=[]){
+    const pool=JOBS_POOL.filter(j=>!j.requireItem||items.includes(j.requireItem));
+    const total=pool.reduce((s,j)=>s+j.weight,0);
+    let r=Math.random()*total;
+    for(const j of pool){ r-=j.weight; if(r<=0) return j.name; }
+    return pool[pool.length-1].name;
   }
 
   function isBacteriaItem(name){ return typeof name==='string'&&name.endsWith('菌'); }
@@ -848,7 +904,11 @@
   });
 
   function getForcedRoute(st){
-    if(st.items.includes('教育ママ')) return 'uni';
+    if(st.items.includes('教育ママ')){
+      // 俳優は就職ルート強制（そのまま俳優継続）
+      if(st.job==='俳優') return 'job';
+      return 'uni';
+    }
     if(st.items.includes('貧困家庭')) return 'job';
     return null;
   }
@@ -1287,6 +1347,21 @@
     playerData={...playerData,[myId]:newSt};
     drawBoard();
 
+    // 就職ルート到着：職業振り分け
+    if(newPos===BRANCH_START&&route==='job'){
+      const usedIds=Array.isArray(playerData.__used_events)?playerData.__used_events:[];
+      // 教育ママ＋俳優：そのまま俳優継続（選択なし）
+      if((newSt.items||[]).includes('教育ママ')&&newSt.job==='俳優'){
+        await doCommitSave(newSt,usedIds);
+        return;
+      }
+      const jobName=rollJob(newSt.items||[]);
+      pendingCommit={newSt,newUsedIds:usedIds,_isJobAssign:true,_jobResult:jobName};
+      await sleep(350);
+      showJobAssignOverlay(jobName);
+      return;
+    }
+
     // 大学ルート到着：振り分け
     if(newPos===BRANCH_START&&route==='uni'){
       const u=rollUniversity(newSt.items||[]);
@@ -1316,6 +1391,24 @@
     $('uni-assign-cost').textContent=`入学金 ${u.tuition}万円`;
     $('uni-assign-overlay').classList.remove('hidden');
   }
+
+  function showJobAssignOverlay(jobName){
+    $('job-assign-name').textContent=jobName;
+    const desc=JOBS[jobName]?.desc||'（効果は後ほど決定）';
+    $('job-assign-desc').textContent=desc;
+    $('job-assign-overlay').classList.remove('hidden');
+  }
+
+  $('btn-job-accept').addEventListener('click',async()=>{
+    $('job-assign-overlay').classList.add('hidden');
+    const {newSt,newUsedIds,_jobResult:jobName}=pendingCommit;
+    await doCommitSave({...newSt,job:jobName},newUsedIds);
+  });
+  $('btn-job-reject').addEventListener('click',async()=>{
+    $('job-assign-overlay').classList.add('hidden');
+    const {newSt,newUsedIds}=pendingCommit;
+    await doCommitSave({...newSt,job:'ニート'},newUsedIds);
+  });
 
   function setEventItemThumb(item){
     const wrap=$('event-item-thumb-wrap');
