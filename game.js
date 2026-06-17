@@ -123,6 +123,14 @@
     // ── 医学部生 限定 ──
     { id:77, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'医学部生', name:'"休む"って、なんだっけ。', happiness:-3, health:-5 },
     { id:78, minPos:21, maxPos:29, requireRoute:'uni', requireUni:'医学部生', name:'医学部で司法試験も会計士試験も受かったやつがいるらしい。は？', happiness:-5 },
+    // 就職ルート 21〜29マス
+    { id:79, minPos:21, maxPos:29, requireRoute:'job', name:'地元の集まりでは、いつも奢らされる', money:-2, happiness:3 },
+    { id:80, minPos:21, maxPos:29, requireRoute:'job', name:'親にプレゼントを買った！', money:-2, happiness:5 },
+    { id:81, minPos:21, maxPos:29, requireRoute:'job', name:'ジムに通い始めた！', item:'ジム' },
+    { id:82, minPos:21, maxPos:29, requireRoute:'job', name:'飲み会した！', item:'酒', happiness:3 },
+    { id:83, minPos:21, maxPos:29, requireRoute:'job', name:'人生初タバコ！', item:'タバコ', happiness:1 },
+    { id:84, minPos:21, maxPos:29, requireRoute:'job', name:'もう働きたくない…', special:true, setJob:'ニート' },
+    { id:85, minPos:21, maxPos:29, requireRoute:'job', name:'ゴルフでホールインワン！', money:5, happiness:3, health:2 },
   ];
 
   const ITEMS = {
