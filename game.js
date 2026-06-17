@@ -222,7 +222,7 @@
     '起業家':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
     '配信者':         { salary:0,  happiness:2,  health:-2, desc:'フォロワー数×1万/ターン\n幸福度+2・健康度-2', specialSalary:'followers' },
     'フリーター':     { salary:0,  happiness:0,  health:0,  desc:'効果なし' },
-    '警察学校':       { salary:1,  happiness:-1, health:1,  desc:'+1万/ターン\n幸福度-1・健康度+1' },
+    '警察学校':       { salary:5,  happiness:-1, health:1,  desc:'+5万/ターン\n幸福度-1・健康度+1' },
     'ヤクザ':         { salary:30, happiness:-2, health:0,  desc:'+30万/ターン\n幸福度-2\n「犯罪歴」獲得', jobGiveItem:'犯罪歴' },
     '大工':           { salary:6,  happiness:0,  health:-2, desc:'+6万/ターン\n健康度-2' },
     'ギャンブラー':   { salary:0,  happiness:1,  health:0,  desc:'ランダム-100〜+100万/ターン\n幸福度+1', specialSalary:'gamble' },
@@ -236,7 +236,7 @@
     '宗教家':         { salary:6,  happiness:8,  health:0,  desc:'+6万/ターン\n幸福度+8' },
     '海賊':           { salary:0,  happiness:4,  health:-2, desc:'幸福度+4・健康度-2\n健康度0で脱落', eliminateAtZeroHealth:true },
     'ラッパー':       { salary:0,  happiness:2,  health:-1, desc:'幸福度+2・健康度-1' },
-    '自衛隊員':       { salary:9,  happiness:1,  health:1,  desc:'+9万/ターン\n幸福度+1・健康度+1' },
+    '自衛隊員':       { salary:5,  happiness:1,  health:1,  desc:'+5万/ターン\n幸福度+1・健康度+1' },
     'ピアニスト':     { salary:6,  happiness:3,  health:0,  desc:'+6万/ターン\n幸福度+3' },
     '死神':           { salary:0,  happiness:-1, health:-1, desc:'幸福度-1・健康度-1' },
   };
