@@ -211,7 +211,7 @@
     'キモ男':           { desc:'毎ターン幸福-2', perTurn:{happiness:-2} },
     'ジム':             { desc:'毎ターン-2万・健康+5', perTurn:{money:-2,health:5} },
     '留学経験':         { desc:'留学経験あり' },
-    '犯罪歴':           { desc:'犯罪歴あり' },
+    '犯罪歴':           { desc:'犯罪歴あり', undiscardable:true },
   };
 
   const JOBS = {
