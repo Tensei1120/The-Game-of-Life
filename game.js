@@ -211,33 +211,34 @@
     'キモ男':           { desc:'毎ターン幸福-2', perTurn:{happiness:-2} },
     'ジム':             { desc:'毎ターン-2万・健康+5', perTurn:{money:-2,health:5} },
     '留学経験':         { desc:'留学経験あり' },
+    '犯罪歴':           { desc:'犯罪歴あり' },
   };
 
   const JOBS = {
-    '俳優':         { salary:0,  happiness:2,  health:1,  desc:'給料0万/ターン\n幸福度+2・健康度+1' },
-    'ニート':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '会社員':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    'スポーツ選手': { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '起業家':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '配信者':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    'フリーター':   { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '警察学校':     { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    'ヤクザ':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '大工':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    'ギャンブラー': { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    'アイドル':     { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '詐欺師':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '料理人':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    'ナイトワーカー':{ salary:0, happiness:0,  health:0,  desc:'（効果未定）' },
-    '農家':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '革命家':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    'コメディアン': { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '宗教家':       { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '海賊':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    'ラッパー':     { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '自衛隊員':     { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    'ピアニスト':   { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
-    '死神':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '俳優':           { salary:0,  happiness:1,  health:1,  desc:'幸福度+1・健康度+1' },
+    'ニート':         { salary:0,  happiness:0,  health:0,  desc:'効果なし' },
+    '会社員':         { salary:8,  happiness:-2, health:-1, desc:'+8万/ターン\n幸福度-2・健康度-1' },
+    'スポーツ選手':   { salary:30, happiness:1,  health:2,  desc:'+30万/ターン\n幸福度+1・健康度+2' },
+    '起業家':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    '配信者':         { salary:0,  happiness:2,  health:-2, desc:'フォロワー数×1万/ターン\n幸福度+2・健康度-2', specialSalary:'followers' },
+    'フリーター':     { salary:0,  happiness:0,  health:0,  desc:'効果なし' },
+    '警察学校':       { salary:1,  happiness:-1, health:1,  desc:'+1万/ターン\n幸福度-1・健康度+1' },
+    'ヤクザ':         { salary:30, happiness:-2, health:0,  desc:'+30万/ターン\n幸福度-2\n「犯罪歴」獲得', jobGiveItem:'犯罪歴' },
+    '大工':           { salary:6,  happiness:0,  health:-2, desc:'+6万/ターン\n健康度-2' },
+    'ギャンブラー':   { salary:0,  happiness:1,  health:0,  desc:'ランダム-100〜+100万/ターン\n幸福度+1', specialSalary:'gamble' },
+    'アイドル':       { salary:0,  happiness:3,  health:1,  desc:'幸福度+3・健康度+1' },
+    '詐欺師':         { salary:0,  happiness:1,  health:-1, desc:'他プレイヤーから5万奪う/ターン\n幸福度+1・健康度-1\n「犯罪歴」獲得', jobGiveItem:'犯罪歴', stealMoney:5 },
+    '料理人':         { salary:5,  happiness:1,  health:4,  desc:'+5万/ターン\n幸福度+1・健康度+4' },
+    'ナイトワーカー': { salary:9,  happiness:-1, health:-3, desc:'+9万/ターン\n幸福度-1・健康度-3' },
+    '農家':           { salary:3,  happiness:2,  health:4,  desc:'+3万/ターン\n幸福度+2・健康度+4' },
+    '革命家':         { salary:0,  happiness:0,  health:0,  desc:'（効果未定）' },
+    'コメディアン':   { salary:0,  happiness:3,  health:0,  desc:'幸福度+3' },
+    '宗教家':         { salary:6,  happiness:8,  health:0,  desc:'+6万/ターン\n幸福度+8' },
+    '海賊':           { salary:0,  happiness:4,  health:-2, desc:'幸福度+4・健康度-2\n健康度0で脱落', eliminateAtZeroHealth:true },
+    'ラッパー':       { salary:0,  happiness:2,  health:-1, desc:'幸福度+2・健康度-1' },
+    '自衛隊員':       { salary:9,  happiness:1,  health:1,  desc:'+9万/ターン\n幸福度+1・健康度+1' },
+    'ピアニスト':     { salary:6,  happiness:3,  health:0,  desc:'+6万/ターン\n幸福度+3' },
+    '死神':           { salary:0,  happiness:-1, health:-1, desc:'幸福度-1・健康度-1' },
   };
 
   const UNIVERSITIES = [
@@ -328,7 +329,8 @@
     return { pos, money:0, happiness:MAX_HAPPINESS, health:MAX_HEALTH,
              items:Array(6).fill(null), job:null, route:null, finished:false,
              hospitalized:false, hospitalPos:0, hospitalTurns:0, prevMapPos:0,
-             itemBonuses:{}, jobBonuses:{}, eliminated:false, uni:null, ronin:false };
+             itemBonuses:{}, jobBonuses:{}, eliminated:false, uni:null, ronin:false,
+             followers:0 };
   }
   function clampStats(st) {
     return { ...st,
@@ -956,7 +958,9 @@
     }
     if(st.job && JOBS[st.job]){
       const jb=JOBS[st.job], bonus=st.jobBonuses||{};
-      money     += (jb.salary    ||0)+(bonus.salary    ||0);
+      // 特殊給与（配信者：フォロワー数×1、ギャンブラーはapplyJobSpecialEffectsで処理）
+      const baseSalary=jb.specialSalary==='followers' ? (st.followers||0)*1 : (jb.salary||0);
+      money     += baseSalary+(bonus.salary    ||0);
       happiness += (jb.happiness ||0)+(bonus.happiness ||0);
       health    += (jb.health    ||0)+(bonus.health    ||0);
     }
@@ -1229,6 +1233,48 @@
     return {updatedSelf,infectedOthers};
   }
 
+  // ── 職業特殊効果（ギャンブラー・ヤクザ・詐欺師・海賊等） ──
+  function applyJobSpecialEffects(st, allData){
+    const job=st.job; if(!job||!JOBS[job]) return {newSt:st,affectedOthers:{},jobEvs:[]};
+    const jb=JOBS[job];
+    let next={...st};
+    const affectedOthers={};
+    const jobEvs=[];
+
+    // ギャンブラー：二次関数的ランダム（中央付近が高確率）
+    if(jb.specialSalary==='gamble'){
+      const money=Math.round((Math.random()-Math.random())*100);
+      next.money=(next.money||0)+money;
+      jobEvs.push({sourceItem:'ギャンブラー',name:money>=0?'ギャンブルで勝った！':'ギャンブルで負けた…',money});
+    }
+
+    // アイテム付与（犯罪歴など）：未所持時のみ
+    if(jb.jobGiveItem&&!(next.items||[]).includes(jb.jobGiveItem)){
+      const items=[...(next.items||[])];
+      const slot=items.indexOf(null);
+      if(slot>=0){ items[slot]=jb.jobGiveItem; next.items=items; }
+    }
+
+    // 詐欺師：ランダムな他プレイヤーから5万奪う
+    if(jb.stealMoney){
+      const targets=players.filter(p=>{
+        if(p.player_id===myId) return false;
+        const s=getStats(allData[p.player_id]);
+        return !s.finished&&!s.eliminated&&!s.hospitalized;
+      });
+      if(targets.length>0){
+        const t=targets[Math.floor(Math.random()*targets.length)];
+        const tSt=getStats(allData[t.player_id]);
+        affectedOthers[t.player_id]={...tSt,money:(tSt.money||0)-jb.stealMoney};
+        next.money=(next.money||0)+jb.stealMoney;
+        const tName=t.player_name||'?';
+        jobEvs.push({sourceItem:'詐欺師',name:`${tName}から${jb.stealMoney}万円を騙し取った！`,money:jb.stealMoney});
+      }
+    }
+
+    return {newSt:next, affectedOthers, jobEvs};
+  }
+
   // ── アイテム毎ターンイベントシステム ──
   function collectPerTurnItemEvents(st){
     const evs=[];
@@ -1446,16 +1492,25 @@
       if(ev.triggerFieldEffect) fieldEffectChange=ev.triggerFieldEffect;
       if(ev.endFieldEffect)     fieldEffectChange='none';
     }
+    // 職業特殊効果（ギャンブラー・詐欺師・ヤクザ等）
+    const jobResult=applyJobSpecialEffects(newSt,playerData);
+    newSt=jobResult.newSt;
+    const affectedOthers=jobResult.affectedOthers;
+    const jobEvs=jobResult.jobEvs;
     // 捨てられないアイテムの付与待ちを回収してからstatsをクリーン化
     const pendingGiveItem=newSt._pendingGiveItem||null;
     newSt=clampStats({...newSt,__newItems:[],_pendingGiveItem:undefined}); // 次ターンから効果発動
+    // 海賊：健康0で脱落
+    if(newSt.job && JOBS[newSt.job]?.eliminateAtZeroHealth && newSt.health<=0 && !newSt.eliminated && !newSt.finished){
+      newSt={...newSt,eliminated:true};
+    }
     let wasJustHospitalized = false;
     const hospThreshold = (newSt.items||[]).includes('根性') ? -5 : 0;
-    if(newSt.health<=hospThreshold && !newSt.hospitalized && !newSt.finished){
+    if(newSt.health<=hospThreshold && !newSt.hospitalized && !newSt.finished && !newSt.eliminated){
       wasJustHospitalized = true;
       newSt = {...newSt, hospitalized:true, hospitalPos:0, hospitalTurns:0, prevMapPos:newSt.pos};
     }
-    const newData={...playerData,[myId]:newSt};
+    const newData={...playerData,[myId]:newSt,...affectedOthers};
     newData.__used_events=newUsedIds;
     if(lastActionInfo){newData.__last_action={...lastActionInfo};lastActionInfo=null;}
 
@@ -1500,7 +1555,8 @@
     drawBoard();
     updateTurnUI();
     requestAnimationFrame(showStatDeltas);
-    if(ptEvs.length>0) await showPerTurnItemEvents(ptEvs);
+    const allPtEvs=[...ptEvs,...jobEvs];
+    if(allPtEvs.length>0) await showPerTurnItemEvents(allPtEvs);
     if(wasJustHospitalized) await showHospitalizationNotification();
     // 毎ターンイベントで受け取った捨てられないアイテム：捨てるアイテムをプレイヤーに選ばせる
     if(pendingGiveItem) await showPostPtEvDiscard(pendingGiveItem);
